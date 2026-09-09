@@ -32,7 +32,6 @@
     .small { font-size:13px; color:#727c8f; }
     #app { display:none; }
     #message { min-height: 22px; font-weight:700; }
-    .hidden { display:none; }
   </style>
 </head>
 <body>
@@ -84,7 +83,7 @@
 
       <div class="card">
         <h2>Next dice</h2>
-        <p class="small">One-shot command. If the next result would be a third consecutive 6 while the guard is ON, the app changes it to 1–5.</p>
+        <p class="small">One-shot test command. With the custom three-six guard ON, a third consecutive 6 is converted to 1–5.</p>
         <div class="row dice" id="diceButtons"></div>
         <div class="row" style="margin-top:10px"><button id="clearDice" class="secondary">Clear next dice</button></div>
       </div>
@@ -103,16 +102,24 @@
   </div>
 
   <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-    import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
+    import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js";
+    import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
 
-    // Derived from the Firebase Android configuration supplied with the project.
+    // Android google-services.json only contains the Android app registration.
+    // Register a Firebase Web App for this same project and paste its appId here.
     const firebaseConfig = {
       apiKey: "AIzaSyA33FItAS-PR3EZYobZfAOK8aMiLl_mR4c",
       authDomain: "king-54b79.firebaseapp.com",
-      projectId: "king-54b79"
+      projectId: "king-54b79",
+      appId: "PASTE_WEB_APP_ID_HERE"
     };
+
+    const $ = id => document.getElementById(id);
+    if (firebaseConfig.appId === "PASTE_WEB_APP_ID_HERE") {
+      $("message").textContent = "Firebase Web App ID missing. Firebase Console → Project settings → Add app → Web, then paste the generated appId into index.html.";
+      throw new Error("Firebase Web App ID is not configured");
+    }
 
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
@@ -126,14 +133,13 @@
     };
     let state = { ...defaults };
     let stopStatus = null;
-
-    const $ = id => document.getElementById(id);
     const players = ["red","green","blue","yellow"];
 
+    function cap(s) { return s[0].toUpperCase()+s.slice(1); }
     function renderPlayers() {
       $("players").innerHTML = players.map(color => `
         <div class="player">
-          <h3>${color[0].toUpperCase()+color.slice(1)}</h3>
+          <h3>${cap(color)}</h3>
           <div class="rangeRow">
             <input id="luck-${color}" type="range" min="0" max="100" value="${state['luck'+cap(color)]}">
             <div class="rangeValue" id="value-${color}">${state['luck'+cap(color)]}%</div>
@@ -143,7 +149,6 @@
         $("value-"+color).textContent = e.target.value + "%";
       }));
     }
-    function cap(s) { return s[0].toUpperCase()+s.slice(1); }
     function render() {
       $("testState").textContent = state.enabled ? "TEST MODE ON" : "TEST MODE OFF";
       $("testState").className = "pill " + (state.enabled ? "ok" : "warn");
@@ -180,7 +185,6 @@
         $("message").textContent = "";
       } catch (e) { $("message").textContent = e.message; }
     };
-
     $("signoutBtn").onclick = () => signOut(auth);
     $("modeBtn").onclick = () => savePatch({enabled:!state.enabled});
     $("guardBtn").onclick = () => savePatch({sixGuard:!state.sixGuard});
