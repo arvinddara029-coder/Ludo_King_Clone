@@ -6,7 +6,7 @@ android {
     compileSdk 33
 
     defaultConfig {
-        applicationId "com.vinaykpro.ludoking"
+        applicationId "com.bishnoi.ludoking"
         minSdk 21
         targetSdk 33
         versionCode 1562
