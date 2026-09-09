@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "711219340629",
+    "project_id": "king-54b79",
+    "storage_bucket": "king-54b79.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:711219340629:android:19b726e230dc2cdba4fbdc",
+        "android_client_info": {
+          "package_name": "com.bishnoi.ludoking"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA33FItAS-PR3EZYobZfAOK8aMiLl_mR4c"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
