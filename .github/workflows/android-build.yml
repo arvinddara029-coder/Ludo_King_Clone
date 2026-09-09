@@ -24,8 +24,9 @@ jobs:
       - name: Prepare Android SDK
         shell: bash
         run: |
-          yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.2"
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platform-tools" "platforms;android-33" "build-tools;33.0.2"
 
       - name: Set up Java 11 for Gradle/AGP
         uses: actions/setup-java@v4
