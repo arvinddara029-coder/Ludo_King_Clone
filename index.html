@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Ludo King — Firebase Test Control</title>
+  <style>
+    :root { font-family: Inter, system-ui, Arial, sans-serif; color: #172033; background: #f5f7fb; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    .wrap { max-width: 1080px; margin: 0 auto; padding: 24px; }
+    .card { background: #fff; border: 1px solid #e7eaf0; border-radius: 18px; padding: 20px; margin-bottom: 18px; box-shadow: 0 8px 30px rgba(30,40,70,.05); }
+    h1,h2 { margin: 0 0 10px; }
+    p { color: #5c667a; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(230px,1fr)); gap: 14px; }
+    label { display:block; font-weight:700; margin-bottom:7px; }
+    input,select,button { width:100%; min-height:44px; border:1px solid #d9deea; border-radius:11px; padding: 10px 12px; font-size:15px; }
+    button { cursor:pointer; font-weight:800; background:#172033; color:#fff; border:0; }
+    button.secondary { background:#e9edf5; color:#172033; }
+    button.danger { background:#a92727; }
+    .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .row button { width:auto; min-width:72px; }
+    .dice button { width:54px; min-width:54px; height:54px; font-size:20px; }
+    .status { display:flex; gap:14px; flex-wrap:wrap; }
+    .pill { padding:9px 12px; background:#f0f3f8; border-radius:999px; font-weight:700; }
+    .pill.ok { background:#e6f7ec; color:#16743a; }
+    .pill.warn { background:#fff3d8; color:#8b5b00; }
+    .player { border:1px solid #e7eaf0; border-radius:14px; padding:15px; }
+    .player h3 { margin:0 0 12px; }
+    .rangeRow { display:grid; grid-template-columns:1fr 60px; gap:10px; align-items:center; }
+    .rangeValue { text-align:center; font-weight:900; }
+    .small { font-size:13px; color:#727c8f; }
+    #app { display:none; }
+    #message { min-height: 22px; font-weight:700; }
+    .hidden { display:none; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card" id="login">
+      <h1>Firebase Test Control</h1>
+      <p>This panel controls <b>Debug/Test Mode only</b>. Release builds ignore these controls.</p>
+      <div class="grid">
+        <div><label>Email</label><input id="email" type="email" autocomplete="username"></div>
+        <div><label>Password</label><input id="password" type="password" autocomplete="current-password"></div>
+      </div>
+      <div class="row" style="margin-top:14px"><button id="loginBtn">Sign in</button></div>
+      <div id="message"></div>
+    </div>
+
+    <div id="app">
+      <div class="card">
+        <div class="status">
+          <div class="pill" id="authState">Signed in</div>
+          <div class="pill" id="testState">TEST MODE OFF</div>
+          <div class="pill" id="livePlayer">Player: —</div>
+          <div class="pill" id="liveDice">Last dice: —</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Game controls</h2>
+        <div class="grid">
+          <div>
+            <label>Test mode</label>
+            <button id="modeBtn">Enable test mode</button>
+          </div>
+          <div>
+            <label>Three-six guard</label>
+            <button id="guardBtn" class="secondary">Guard: ON</button>
+          </div>
+          <div>
+            <label>Jam player</label>
+            <select id="jamColor">
+              <option value="">None</option>
+              <option value="red">Red</option>
+              <option value="green">Green</option>
+              <option value="blue">Blue</option>
+              <option value="yellow">Yellow</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Next dice</h2>
+        <p class="small">One-shot command. If the next result would be a third consecutive 6 while the guard is ON, the app changes it to 1–5.</p>
+        <div class="row dice" id="diceButtons"></div>
+        <div class="row" style="margin-top:10px"><button id="clearDice" class="secondary">Clear next dice</button></div>
+      </div>
+
+      <div class="card">
+        <h2>Player luck (test mode)</h2>
+        <p class="small">Luck is a test bias: the percentage is the chance of a boosted 6. It does not affect release builds.</p>
+        <div class="grid" id="players"></div>
+      </div>
+
+      <div class="card">
+        <div class="row"><button id="saveBtn">Save controls</button><button id="signoutBtn" class="secondary">Sign out</button></div>
+        <div id="message2" class="small" style="margin-top:10px"></div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    // Derived from the Firebase Android configuration supplied with the project.
+    const firebaseConfig = {
+      apiKey: "AIzaSyA33FItAS-PR3EZYobZfAOK8aMiLl_mR4c",
+      authDomain: "king-54b79.firebaseapp.com",
+      projectId: "king-54b79"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const controlRef = doc(db, "ludo_test_control", "current");
+    const statusRef = doc(db, "ludo_test_status", "current");
+
+    const defaults = {
+      enabled: false, sixGuard: true, nextDice: 0, nextDiceId: "",
+      jamColor: "", luckRed: 0, luckGreen: 0, luckBlue: 0, luckYellow: 0
+    };
+    let state = { ...defaults };
+    let stopStatus = null;
+
+    const $ = id => document.getElementById(id);
+    const players = ["red","green","blue","yellow"];
+
+    function renderPlayers() {
+      $("players").innerHTML = players.map(color => `
+        <div class="player">
+          <h3>${color[0].toUpperCase()+color.slice(1)}</h3>
+          <div class="rangeRow">
+            <input id="luck-${color}" type="range" min="0" max="100" value="${state['luck'+cap(color)]}">
+            <div class="rangeValue" id="value-${color}">${state['luck'+cap(color)]}%</div>
+          </div>
+        </div>`).join("");
+      players.forEach(color => $("luck-"+color).addEventListener("input", e => {
+        $("value-"+color).textContent = e.target.value + "%";
+      }));
+    }
+    function cap(s) { return s[0].toUpperCase()+s.slice(1); }
+    function render() {
+      $("testState").textContent = state.enabled ? "TEST MODE ON" : "TEST MODE OFF";
+      $("testState").className = "pill " + (state.enabled ? "ok" : "warn");
+      $("modeBtn").textContent = state.enabled ? "Disable test mode" : "Enable test mode";
+      $("guardBtn").textContent = "Guard: " + (state.sixGuard ? "ON" : "OFF");
+      $("jamColor").value = state.jamColor || "";
+      renderPlayers();
+    }
+
+    for (let i=1;i<=6;i++) {
+      const b=document.createElement("button"); b.textContent=i;
+      b.onclick=async()=>savePatch({nextDice:i,nextDiceId:String(Date.now())+"-"+Math.random().toString(16).slice(2)});
+      $("diceButtons").appendChild(b);
+    }
+
+    async function loadControl() {
+      const snap = await getDoc(controlRef);
+      if (snap.exists()) state = {...defaults, ...snap.data()};
+      else await setDoc(controlRef, defaults);
+      render();
+    }
+
+    async function savePatch(patch) {
+      state = {...state, ...patch};
+      await setDoc(controlRef, patch, {merge:true});
+      render();
+      $("message2").textContent = "Saved at " + new Date().toLocaleTimeString();
+    }
+
+    $("loginBtn").onclick = async () => {
+      $("message").textContent = "Signing in…";
+      try {
+        await signInWithEmailAndPassword(auth, $("email").value.trim(), $("password").value);
+        $("message").textContent = "";
+      } catch (e) { $("message").textContent = e.message; }
+    };
+
+    $("signoutBtn").onclick = () => signOut(auth);
+    $("modeBtn").onclick = () => savePatch({enabled:!state.enabled});
+    $("guardBtn").onclick = () => savePatch({sixGuard:!state.sixGuard});
+    $("jamColor").onchange = e => savePatch({jamColor:e.target.value});
+    $("clearDice").onclick = () => savePatch({nextDice:0,nextDiceId:""});
+    $("saveBtn").onclick = async () => {
+      const patch = { enabled:state.enabled, sixGuard:state.sixGuard, jamColor:$("jamColor").value };
+      players.forEach(color => patch["luck"+cap(color)] = Number($("luck-"+color).value));
+      await savePatch(patch);
+    };
+
+    onAuthStateChanged(auth, async user => {
+      if (!user) {
+        $("login").style.display="block"; $("app").style.display="none";
+        if (stopStatus) { stopStatus(); stopStatus=null; }
+        return;
+      }
+      $("login").style.display="none"; $("app").style.display="block";
+      $("authState").textContent = user.email || "Authenticated";
+      try { await loadControl(); } catch (e) { $("message2").textContent = e.message; }
+      if (!stopStatus) {
+        stopStatus = onSnapshot(statusRef, snap => {
+          if (!snap.exists()) return;
+          const d=snap.data();
+          $("livePlayer").textContent="Player: "+(d.playerColor || "—");
+          $("liveDice").textContent="Last dice: "+(d.dice ?? "—");
+        });
+      }
+    });
+  </script>
+</body>
+</html>
