@@ -17,7 +17,6 @@
     input,select,button { width:100%; min-height:44px; border:1px solid #d9deea; border-radius:11px; padding: 10px 12px; font-size:15px; }
     button { cursor:pointer; font-weight:800; background:#172033; color:#fff; border:0; }
     button.secondary { background:#e9edf5; color:#172033; }
-    button.danger { background:#a92727; }
     .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
     .row button { width:auto; min-width:72px; }
     .dice button { width:54px; min-width:54px; height:54px; font-size:20px; }
@@ -60,23 +59,11 @@
       <div class="card">
         <h2>Game controls</h2>
         <div class="grid">
-          <div>
-            <label>Test mode</label>
-            <button id="modeBtn">Enable test mode</button>
-          </div>
-          <div>
-            <label>Three-six guard</label>
-            <button id="guardBtn" class="secondary">Guard: ON</button>
-          </div>
+          <div><label>Test mode</label><button id="modeBtn">Enable test mode</button></div>
+          <div><label>Three-six guard</label><button id="guardBtn" class="secondary">Guard: ON</button></div>
           <div>
             <label>Jam player</label>
-            <select id="jamColor">
-              <option value="">None</option>
-              <option value="red">Red</option>
-              <option value="green">Green</option>
-              <option value="blue">Blue</option>
-              <option value="yellow">Yellow</option>
-            </select>
+            <select id="jamColor"><option value="">None</option><option value="red">Red</option><option value="green">Green</option><option value="blue">Blue</option><option value="yellow">Yellow</option></select>
           </div>
         </div>
       </div>
@@ -106,50 +93,39 @@
     import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js";
     import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
 
-    // Android google-services.json only contains the Android app registration.
-    // Register a Firebase Web App for this same project and paste its appId here.
     const firebaseConfig = {
-      apiKey: "AIzaSyA33FItAS-PR3EZYobZfAOK8aMiLl_mR4c",
+      apiKey: "AIzaSyATaM7kMPldTPPTA2bwXjTigZE908L47y8",
       authDomain: "king-54b79.firebaseapp.com",
+      databaseURL: "https://king-54b79-default-rtdb.firebaseio.com",
       projectId: "king-54b79",
-      appId: "PASTE_WEB_APP_ID_HERE"
+      storageBucket: "king-54b79.firebasestorage.app",
+      messagingSenderId: "711219340629",
+      appId: "1:711219340629:web:f27e4ad7cffb3cdfa4fbdc",
+      measurementId: "G-YWNP4YQ7QF"
     };
 
     const $ = id => document.getElementById(id);
-    if (firebaseConfig.appId === "PASTE_WEB_APP_ID_HERE") {
-      $("message").textContent = "Firebase Web App ID missing. Firebase Console → Project settings → Add app → Web, then paste the generated appId into index.html.";
-      throw new Error("Firebase Web App ID is not configured");
-    }
-
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
     const controlRef = doc(db, "ludo_test_control", "current");
     const statusRef = doc(db, "ludo_test_status", "current");
 
-    const defaults = {
-      enabled: false, sixGuard: true, nextDice: 0, nextDiceId: "",
-      jamColor: "", luckRed: 0, luckGreen: 0, luckBlue: 0, luckYellow: 0
-    };
+    const defaults = { enabled:false, sixGuard:true, nextDice:0, nextDiceId:"", jamColor:"", luckRed:0, luckGreen:0, luckBlue:0, luckYellow:0 };
     let state = { ...defaults };
     let stopStatus = null;
     const players = ["red","green","blue","yellow"];
 
-    function cap(s) { return s[0].toUpperCase()+s.slice(1); }
-    function renderPlayers() {
+    function cap(s){ return s[0].toUpperCase()+s.slice(1); }
+    function renderPlayers(){
       $("players").innerHTML = players.map(color => `
-        <div class="player">
-          <h3>${cap(color)}</h3>
-          <div class="rangeRow">
-            <input id="luck-${color}" type="range" min="0" max="100" value="${state['luck'+cap(color)]}">
-            <div class="rangeValue" id="value-${color}">${state['luck'+cap(color)]}%</div>
-          </div>
-        </div>`).join("");
-      players.forEach(color => $("luck-"+color).addEventListener("input", e => {
-        $("value-"+color).textContent = e.target.value + "%";
-      }));
+        <div class="player"><h3>${cap(color)}</h3><div class="rangeRow">
+          <input id="luck-${color}" type="range" min="0" max="100" value="${state['luck'+cap(color)]}">
+          <div class="rangeValue" id="value-${color}">${state['luck'+cap(color)]}%</div>
+        </div></div>`).join("");
+      players.forEach(color => $("luck-"+color).addEventListener("input", e => { $("value-"+color).textContent=e.target.value+"%"; }));
     }
-    function render() {
+    function render(){
       $("testState").textContent = state.enabled ? "TEST MODE ON" : "TEST MODE OFF";
       $("testState").className = "pill " + (state.enabled ? "ok" : "warn");
       $("modeBtn").textContent = state.enabled ? "Disable test mode" : "Enable test mode";
@@ -157,62 +133,36 @@
       $("jamColor").value = state.jamColor || "";
       renderPlayers();
     }
-
-    for (let i=1;i<=6;i++) {
+    for(let i=1;i<=6;i++){
       const b=document.createElement("button"); b.textContent=i;
       b.onclick=async()=>savePatch({nextDice:i,nextDiceId:String(Date.now())+"-"+Math.random().toString(16).slice(2)});
       $("diceButtons").appendChild(b);
     }
-
-    async function loadControl() {
-      const snap = await getDoc(controlRef);
-      if (snap.exists()) state = {...defaults, ...snap.data()};
-      else await setDoc(controlRef, defaults);
+    async function loadControl(){
+      const snap=await getDoc(controlRef);
+      if(snap.exists()) state={...defaults,...snap.data()}; else await setDoc(controlRef,defaults);
       render();
     }
-
-    async function savePatch(patch) {
-      state = {...state, ...patch};
-      await setDoc(controlRef, patch, {merge:true});
-      render();
-      $("message2").textContent = "Saved at " + new Date().toLocaleTimeString();
+    async function savePatch(patch){
+      state={...state,...patch}; await setDoc(controlRef,patch,{merge:true}); render();
+      $("message2").textContent="Saved at "+new Date().toLocaleTimeString();
     }
-
-    $("loginBtn").onclick = async () => {
-      $("message").textContent = "Signing in…";
-      try {
-        await signInWithEmailAndPassword(auth, $("email").value.trim(), $("password").value);
-        $("message").textContent = "";
-      } catch (e) { $("message").textContent = e.message; }
+    $("loginBtn").onclick=async()=>{
+      $("message").textContent="Signing in…";
+      try{ await signInWithEmailAndPassword(auth,$("email").value.trim(),$("password").value); $("message").textContent=""; }
+      catch(e){ $("message").textContent=e.message; }
     };
-    $("signoutBtn").onclick = () => signOut(auth);
-    $("modeBtn").onclick = () => savePatch({enabled:!state.enabled});
-    $("guardBtn").onclick = () => savePatch({sixGuard:!state.sixGuard});
-    $("jamColor").onchange = e => savePatch({jamColor:e.target.value});
-    $("clearDice").onclick = () => savePatch({nextDice:0,nextDiceId:""});
-    $("saveBtn").onclick = async () => {
-      const patch = { enabled:state.enabled, sixGuard:state.sixGuard, jamColor:$("jamColor").value };
-      players.forEach(color => patch["luck"+cap(color)] = Number($("luck-"+color).value));
-      await savePatch(patch);
-    };
-
-    onAuthStateChanged(auth, async user => {
-      if (!user) {
-        $("login").style.display="block"; $("app").style.display="none";
-        if (stopStatus) { stopStatus(); stopStatus=null; }
-        return;
-      }
-      $("login").style.display="none"; $("app").style.display="block";
-      $("authState").textContent = user.email || "Authenticated";
-      try { await loadControl(); } catch (e) { $("message2").textContent = e.message; }
-      if (!stopStatus) {
-        stopStatus = onSnapshot(statusRef, snap => {
-          if (!snap.exists()) return;
-          const d=snap.data();
-          $("livePlayer").textContent="Player: "+(d.playerColor || "—");
-          $("liveDice").textContent="Last dice: "+(d.dice ?? "—");
-        });
-      }
+    $("signoutBtn").onclick=()=>signOut(auth);
+    $("modeBtn").onclick=()=>savePatch({enabled:!state.enabled});
+    $("guardBtn").onclick=()=>savePatch({sixGuard:!state.sixGuard});
+    $("jamColor").onchange=e=>savePatch({jamColor:e.target.value});
+    $("clearDice").onclick=()=>savePatch({nextDice:0,nextDiceId:""});
+    $("saveBtn").onclick=async()=>{ const patch={enabled:state.enabled,sixGuard:state.sixGuard,jamColor:$("jamColor").value}; players.forEach(c=>patch["luck"+cap(c)]=Number($("luck-"+c).value)); await savePatch(patch); };
+    onAuthStateChanged(auth,async user=>{
+      if(!user){ $("login").style.display="block"; $("app").style.display="none"; if(stopStatus){stopStatus();stopStatus=null;} return; }
+      $("login").style.display="none"; $("app").style.display="block"; $("authState").textContent=user.email||"Authenticated";
+      try{ await loadControl(); }catch(e){ $("message2").textContent=e.message; }
+      if(!stopStatus){ stopStatus=onSnapshot(statusRef,snap=>{ if(!snap.exists())return; const d=snap.data(); $("livePlayer").textContent="Player: "+(d.playerColor||"—"); $("liveDice").textContent="Last dice: "+(d.dice??"—"); }); }
     });
   </script>
 </body>
