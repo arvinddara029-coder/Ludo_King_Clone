@@ -2,6 +2,8 @@ plugins {
     id 'com.android.application'
 }
 
+apply plugin: 'com.google.gms.google-services'
+
 android {
     compileSdk 33
 
@@ -27,11 +29,32 @@ android {
     }
 }
 
-dependencies {
+// The original game keeps its Java sources in a single large MainActivity file.
+// This build-time patch hooks only the dice result line so the UI/source flow stays unchanged.
+tasks.register('applyFirebaseTestPatch') {
+    doLast {
+        def target = file("$projectDir/src/main/java/com/vinaykpro/ludoking/MainActivity.java")
+        if (!target.exists()) {
+            throw new GradleException("MainActivity.java not found: $target")
+        }
+        def text = target.getText('UTF-8')
+        def original = 'int ch = (int) Math.ceil(Math.random()*6);'
+        def patched = 'int ch = FirebaseTestController.resolveDice(MainActivity.this);'
+        if (text.contains(original)) {
+            target.write(text.replace(original, patched), 'UTF-8')
+        }
+    }
+}
 
+preBuild.dependsOn applyFirebaseTestPatch
+
+dependencies {
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'com.google.android.material:material:1.6.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    implementation platform('com.google.firebase:firebase-bom:32.8.1')
+    implementation 'com.google.firebase:firebase-auth'
+    implementation 'com.google.firebase:firebase-firestore'
     testImplementation 'junit:junit:4.+'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
