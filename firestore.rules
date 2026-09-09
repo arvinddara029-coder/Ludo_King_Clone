@@ -1,0 +1,15 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /ludo_test_control/current {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && request.auth.token.email != null
+        && request.auth.token.email_verified == true;
+    }
+
+    match /ludo_test_status/current {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
