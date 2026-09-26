@@ -16,8 +16,8 @@ android {
         applicationId "com.ludoking.mindnova"
         minSdk 21
         targetSdk 33
-        versionCode 1563
-        versionName "8.1.0.100"
+        versionCode 1564
+        versionName "9.0.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }

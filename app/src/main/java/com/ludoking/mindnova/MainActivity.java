@@ -180,12 +180,22 @@ public class MainActivity extends AppCompatActivity {
     boolean matchOver = false;
     String winnersCsv = "";
     long lockToastAt = 0;
-    // turn timer (Ludo King style)
-    TextView turnTimerText;
-    android.widget.ProgressBar turnTimerBar;
-    Runnable turnTimerRunnable;
-    long turnTimerDeadline = 0;
-    long turnTimerTotal = 0;
+    // MindNova: turn timer UI poori tarah hata di gayi hai.
+    // Sirf optional "auto-play after N sec" (advanced setting, default OFF) bacha hai.
+    Runnable autoPlayRunnable;
+    long autoPlayDeadline = 0;
+
+    // MindNova: animation timings — default ab PEHLE SE DHEEMA (Ludo King jaisa aaram),
+    // aur developer panel se har value override ho sakti hai (RemoteConfig me same naam).
+    long STEP_MS = 300;          // goti ek ghar chalne ka time (pehle 250)
+    long STEP_GAP_MS = 300;      // do ghar ke beech ka gap (pehle 230)
+    long OPEN_MS = 520;          // ghar se bahar nikalne ka time (pehle 420)
+    long HOME_MS = 520;          // kaati hui goti ki ghar wapsi (pehle 420)
+    long DICE_FRAME_MS = 72;     // dice ghoomne ka ek frame (pehle 50 = bahut tez)
+    long DICE_SPIN_MS = 620;     // poora dice spin (pehle 380)
+    long TURN_GAP_MS = 300;      // baari badalne se pehle gap (pehle 230)
+    long KILL_GAP_MS = 300;
+    int diceFrameMsUsed = 0;     // dice animation kab rebuild karni hai
 
     RemoteControl.Handler remoteHandler = new RemoteControl.Handler() {
         @Override public void onExtraTurn() { grantRemoteExtraTurn(); }
@@ -248,6 +258,8 @@ public class MainActivity extends AppCompatActivity {
 
         ImageView pieceIcon,pieceStandIcon;
         boolean isThisPlayerWon = false;
+        // MindNova: safed circle ki jagah color ka "stand" (Ludo King style)
+        boolean standThemed = false;
 
 
         private final ObjectAnimator rotateAnimator;
@@ -333,11 +345,34 @@ public class MainActivity extends AppCompatActivity {
             });*/
             rotateAnimator = ObjectAnimator.ofFloat(readyToPick,"rotation",360,0);
             rotateAnimator.setDuration(circleRotateMs());
+            // MindNova: safed ring ki jagah ab COLOR ka ring ghoomta hai (Ludo King jaisa).
+            // Rotation sirf tab chalti hai jab goti chalne layak ho (activeState) — 16 gotiyon
+            // par ek saath nahi, isliye battery/lag par asar nahi padta.
             rotateAnimator.setRepeatCount(ObjectAnimator.INFINITE);
             rotateAnimator.setRepeatMode(ObjectAnimator.RESTART);
             rotateAnimator.setInterpolator(new LinearInterpolator());
-            // MindNova lag fix: 16 gotiyon par infinite rotation pehle se chalana band.
-            // Rotation sirf active (chal sakne wali) goti par chalega — activeState() dekho.
+            themePieceLook();
+        }
+
+        /**
+         * MindNova UI fix: goti ke NEECHE jo safed-safed circle (innercircle) aur chalne wali
+         * goti ka safed ghoomta ring (outercircle) dikh raha tha, use Ludo King jaisa
+         * COLOR ka "stand" bana diya. Position/size waisi hi hai (jo pehle se sahi thi) —
+         * sirf rang badla hai, isliye layout kharab hone ka koi risk nahi.
+         */
+        void themePieceLook() {
+            try {
+                if (standThemed) return;
+                standThemed = true;
+                if (!normalPiece) return; // stylish goti ka apna look hai — usme stand nahi
+                if (pieceStandIcon != null) {
+                    pieceStandIcon.setColorFilter(pieceStandShade(colour), PorterDuff.Mode.SRC_IN);
+                    pieceStandIcon.setVisibility(View.VISIBLE);
+                }
+                if (readyToPick != null) {
+                    readyToPick.setColorFilter(pieceRingShade(colour), PorterDuff.Mode.SRC_IN);
+                }
+            } catch (Throwable ignored) {}
         }
 
         void onClickForBot() {
@@ -364,7 +399,7 @@ public class MainActivity extends AppCompatActivity {
             cancelTurnTimer();
             isAlive = true;
             currBlock = startPosition;
-            piece.animate().translationX(x[startPosition]+pushXForPieces).translationY(y[startPosition]-pushYForPieces).setDuration(spd(420)).start(); // 16 75
+            piece.animate().translationX(x[startPosition]+pushXForPieces).translationY(y[startPosition]-pushYForPieces).setDuration(openMs()).start(); // 16 75
             globalHandler.postDelayed(() -> {
                 isDiceMovableExtraChance = true;
                 if(!isBotPiece && !isAutoColor(colour)) { hintArrow.setVisibility(View.VISIBLE); }
@@ -376,7 +411,7 @@ public class MainActivity extends AppCompatActivity {
                 } else {
                     piece.setElevation(currBlock);
                 }
-            }, spd(420));
+            }, openMs());
             globalHandler.postDelayed(new Runnable() {
                 @Override
                 public void run() {
@@ -384,7 +419,7 @@ public class MainActivity extends AppCompatActivity {
                         d.roll();
                     }
                 }
-            }, spd(550));
+            }, openMs() + spd(140));
         }
 
         void die()
@@ -406,18 +441,19 @@ public class MainActivity extends AppCompatActivity {
                         if(currBlock==0) currBlock=51; else --currBlock;
                         piece.setTranslationX(x[currBlock]+pushXForPieces);
                         piece.setTranslationY(y[currBlock]-pushYForPieces);
-                        globalHandler.postDelayed(this,20);
+                        globalHandler.postDelayed(this, dieStepMs());
                     } else {
                         if(piece.getScaleX()<1.0f) {
                             piece.setScaleX(1.0f);
                             piece.setScaleY(1.0f);
                         }
-                        piece.animate().translationX(defX).translationY(defY).setDuration(spd(420)).start();
+                        piece.animate().translationX(defX).translationY(defY).setDuration(homeMs()).start();
                         globalHandler.removeCallbacks(this);
                     }
                 }
             };
-            globalHandler.post(r);
+            // MindNova: kill ka chhota sa pause (Ludo King jaisa) — speed panel se badal sakti hai
+            globalHandler.postDelayed(r, killGapMs());
             //piece.animate().translationX(defX).translationY(defY).setDuration(400).start();
         }
 
@@ -472,7 +508,7 @@ public class MainActivity extends AppCompatActivity {
 
             if(currBlock==endPosition) { winnerBlocks = getWinnerBlocks(endPosition); isReadyToEnterWinnerZone = true; }
 
-            piece.animate().translationX(x[currBlock] + pushXForPieces).translationY(y[currBlock] - pushYForPieces).setDuration(spd(250)).start();
+            piece.animate().translationX(x[currBlock] + pushXForPieces).translationY(y[currBlock] - pushYForPieces).setDuration(stepMs()).start();
             /*if(!isReadyToEnterWinnerZone)
             {
                 piece.animate().translationX(x[currBlock] + pushXForPieces).translationY(y[currBlock] - pushYForPieces).setDuration(300).start();
@@ -537,6 +573,11 @@ public class MainActivity extends AppCompatActivity {
 
                             int pantaValue = 4;
                             if(gametype==3) { pantaValue = 1; }
+                            try {
+                                if (remote != null && remote.config.pantaPieces > 0) {
+                                    pantaValue = remote.config.pantaPieces;
+                                }
+                            } catch (Throwable ignored) {}
 
                             if(temp>=pantaValue) { //4
                                 isThisPlayerWon = true;
@@ -732,7 +773,7 @@ public class MainActivity extends AppCompatActivity {
                     },10);
                     //checkAdjustments(currBlock);
 
-                    if(diceValue == 6 || currWinnerBlock>5 || isDeadChanceAvailable && !isThisPlayerWon) {
+                    if(givesExtraTurn(diceValue, currWinnerBlock, isDeadChanceAvailable && !isThisPlayerWon)) {
                         isDiceMovableExtraChance = true;
                         if(!isBotPiece && !isAutoColor(colour)) { hintArrow.setVisibility(View.VISIBLE); } else {
                             globalHandler.postDelayed(new Runnable() {
@@ -747,12 +788,19 @@ public class MainActivity extends AppCompatActivity {
                         d.isDiceClickable = true;
                     }
                 }
-            }, spd(230)); //325
+            }, stepGapMs()); //325
         }
 
 
 
         public boolean check(int diceValue) {
+            // MindNova: developer ne "aakhri goti ghar na jaaye" on kiya hai to us goti ke
+            // ghar ke raste wale moves band (isliye wo atak jaati hai — jaise user ne kaha:
+            // "1 aayega hi nahi").
+            if (homeMoveBlocked(this, diceValue)) {
+                inactiveState();
+                return false;
+            }
             // MindNova: remote se "need six to open" off ho to kisi bhi dice par goti khul sakti hai
             if (!isAlive) {
                 if (canOpenWith(diceValue)) {
@@ -1212,15 +1260,8 @@ public class MainActivity extends AppCompatActivity {
         {
             this.diceImgView = diceImgView;
             this.numberOfPlayers = nop;
-            diceAnimationDrawable = new AnimationDrawable();
-            diceAnimationDrawable.addFrame(ResourcesCompat.getDrawable(getResources(),R.drawable.dice0001,null),50);
-            diceAnimationDrawable.addFrame(ResourcesCompat.getDrawable(getResources(),R.drawable.dice0002,null),50);
-            diceAnimationDrawable.addFrame(ResourcesCompat.getDrawable(getResources(),R.drawable.dice0003,null),50);
-            diceAnimationDrawable.addFrame(ResourcesCompat.getDrawable(getResources(),R.drawable.dice0004,null),50);
-            diceAnimationDrawable.addFrame(ResourcesCompat.getDrawable(getResources(),R.drawable.dice0005,null),50);
-            diceAnimationDrawable.addFrame(ResourcesCompat.getDrawable(getResources(),R.drawable.dice0006,null),50);
-            diceAnimationDrawable.addFrame(ResourcesCompat.getDrawable(getResources(),R.drawable.dice0007,null),50);
-            diceAnimationDrawable.addFrame(ResourcesCompat.getDrawable(getResources(),R.drawable.dice0008,null),50);
+            // MindNova: dice ki ghoomne ki speed dheemi (pehle har frame 50ms = bahut tez).
+            buildDiceFrames();
 
             tLeftLayout = findViewById(R.id.tleftdicebg);
             tRightLayout = findViewById(R.id.trightdicebg);
@@ -1339,6 +1380,26 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
+        /** Dice spin ke frames banao — speed panel se badal sakti hai. */
+        void buildDiceFrames() {
+            try {
+                int ms = (int) diceFrameMs();
+                if (diceAnimationDrawable != null && ms == diceFrameMsUsed) return;
+                AnimationDrawable ad = new AnimationDrawable();
+                ad.addFrame(ResourcesCompat.getDrawable(getResources(), R.drawable.dice0001, null), ms);
+                ad.addFrame(ResourcesCompat.getDrawable(getResources(), R.drawable.dice0002, null), ms);
+                ad.addFrame(ResourcesCompat.getDrawable(getResources(), R.drawable.dice0003, null), ms);
+                ad.addFrame(ResourcesCompat.getDrawable(getResources(), R.drawable.dice0004, null), ms);
+                ad.addFrame(ResourcesCompat.getDrawable(getResources(), R.drawable.dice0005, null), ms);
+                ad.addFrame(ResourcesCompat.getDrawable(getResources(), R.drawable.dice0006, null), ms);
+                ad.addFrame(ResourcesCompat.getDrawable(getResources(), R.drawable.dice0007, null), ms);
+                ad.addFrame(ResourcesCompat.getDrawable(getResources(), R.drawable.dice0008, null), ms);
+                ad.setOneShot(true);
+                diceAnimationDrawable = ad;
+                diceFrameMsUsed = ms;
+            } catch (Throwable ignored) {}
+        }
+
         void roll() {
             // MindNova: remote dice lock (pause jaisa)
             if (remote != null && remote.config.lockDice) {
@@ -1355,6 +1416,7 @@ public class MainActivity extends AppCompatActivity {
                 diceRollSound.seekTo(5);
                 diceRollSound.start();
             }
+            buildDiceFrames(); // panel se speed badli ho to naye frames
             mainDiceImageView.setImageDrawable(diceAnimationDrawable);
             diceAnimationDrawable.setOneShot(true);
             diceAnimationDrawable.start();
@@ -1612,9 +1674,9 @@ public class MainActivity extends AppCompatActivity {
                         diceHandler.postDelayed(() -> {
                             switchPlayers();
                             isDiceClickable = true;
-                        }, spd(500));
+                        }, turnGapMs() + spd(200));
                     }
-            }, spd(380));
+            }, spinMs());
             }
     }
 
@@ -2633,6 +2695,251 @@ public class MainActivity extends AppCompatActivity {
     // ================= MindNova helpers (remote + rules + feel) =================
 
     /** Jis khiladi ki baari chal rahi hai (index juggling sambhal kar). */
+    // ---------------- MindNova: NUMBER ENGINE (developer ka poora control) ----------------
+    //
+    // Panel se developer chun sakta hai (har color ke liye alag):
+    //   AUTO   (0) — bilkul normal random (jitna pehle hota tha)
+    //   MANUAL (1) — sirf developer ke diye number chalenge (next + queue + forceDice)
+    //   ASSIST (2) — insaaf jaisa lagta hai, par "dead roll" nahi hota: jab koi goti nahi
+    //                chal sakti to wo number aa hi nahi sakta. Ghar pahunchane wala number
+    //                aa sakta hai (kabhi kabhi) — koi goti atakti nahi.
+    //   SURE   (3) — pakka: agar koi goti isi dice se ghar pahunch sakti hai to WAHI number;
+    //                warna 6 — goti tezi se aage badhti hai aur aakhri goti bhi ghar chali jaati hai.
+    //
+    // "Last goti stuck" (blockHome) ON kiya to us color ki aakhri goti ko usse ghar
+    // pahunchane wala number KABHI nahi milega (jaise last me 2 chahiye tha, par 2 hi nahi aata) —
+    // Manual numbers chhod kar (MANUAL mode me developer jo dega wahi chalega).
+
+    /** Goti ko ghar pahunchne me kitne step baaki hain (winner-zone samet). -1 = khel me nahi. */
+    int needToHome(Piece p) {
+        try {
+            if (p == null || !p.isAlive || p.hasCompletedItsPurpose || p.isThisPlayerWon) return -1;
+            int n;
+            if (p.isReadyToEnterWinnerZone) {
+                n = 6 - p.currWinnerBlock;
+            } else {
+                int steps = ((p.endPosition - p.currBlock) % 52 + 52) % 52;
+                n = steps + 6;
+            }
+            if (n < 1) n = 1;
+            return n;
+        } catch (Throwable t) {
+            return -1;
+        }
+    }
+
+    /** Bilkul ghar ke dwar (endPosition) par pahunchane wala step count. */
+    int stepsToDoor(Piece p) {
+        try {
+            if (p == null) return -1;
+            if (p.isReadyToEnterWinnerZone) return -1;
+            return ((p.endPosition - p.currBlock) % 52 + 52) % 52;
+        } catch (Throwable t) {
+            return -1;
+        }
+    }
+
+    /** Is dice se ye goti chal sakti hai? (game ke apne rule jaisa hi) */
+    boolean pieceMovesWith(Piece p, int d) {
+        try {
+            if (p == null || d < 1 || d > 6) return false;
+            if (p.hasCompletedItsPurpose || p.isThisPlayerWon) return false;
+            if (!p.isAlive) return canPlayPiece(p.colour) && canOpenWith(d);
+            if (!canPlayPiece(p.colour)) return false;
+            if (homeMoveBlocked(p, d)) return false;
+            return (p.numberOfSteps + d) < 57;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    boolean anyMovesWith(List<Piece> list, int d) {
+        try {
+            if (list == null) return false;
+            for (Piece p : list) {
+                if (pieceMovesWith(p, d)) return true;
+            }
+        } catch (Throwable ignored) {}
+        return false;
+    }
+
+    boolean anyMovesWith(String color, int d) {
+        return anyMovesWith(getPiecesByColor(color), d);
+    }
+
+    /** Ye dice aakhri goti ko ghar bhej dega? (developer ka "stuck" mode isse rokta hai) */
+    boolean homeBlockedFor(String color, int dice) {
+        boolean blocked = false;
+        try { if (remote != null) blocked = remote.config.isHomeBlocked(color); } catch (Throwable ignored) {}
+        if (!blocked || dice < 1 || dice > 6) return false;
+        try {
+            int alive = 0;
+            for (Piece p : getPiecesByColor(color)) {
+                if (p.isAlive && !p.hasCompletedItsPurpose && !p.isThisPlayerWon) alive++;
+            }
+            if (alive != 1) return false; // sirf AAKHRI goti par lagta hai
+            for (Piece p : getPiecesByColor(color)) {
+                if (!p.isAlive || p.hasCompletedItsPurpose || p.isThisPlayerWon) continue;
+                if (p.isReadyToEnterWinnerZone) {
+                    int need = 6 - p.currWinnerBlock;
+                    if (need >= 1 && dice >= need) return true; // ye usse ghar bhej dega
+                } else {
+                    int door = stepsToDoor(p);
+                    // dwarf se aage nikalne wala (ya bilkul door par pahunchane wala) koi bhi
+                    // number usse ghar ke raste par le jaata hai — isliye sab block
+                    if (door >= 1 && dice >= door) return true;
+                }
+            }
+        } catch (Throwable ignored) {}
+        return false;
+    }
+
+    /** Kya ye move is goti ko ghar ke raste par le jayega (aur developer ne rok diya hai)? */
+    boolean homeMoveBlocked(Piece p, int dice) {
+        try {
+            if (p == null || dice < 1 || dice > 6) return false;
+            if (remote == null) return false;
+            if (!remote.config.isHomeBlocked(p.colour)) return false;
+            if (!p.isAlive || p.hasCompletedItsPurpose || p.isThisPlayerWon) return false;
+            return homeBlockedFor(p.colour, dice);
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /** Engine ka faisla: 0 = koi engine nahi (normal random chalega). */
+    int engineDiceFor(String color) {
+        if (color == null) return 0;
+        int mode = 0;
+        try { if (remote != null) mode = remote.config.modeFor(color); } catch (Throwable ignored) {}
+        if (mode != 2 && mode != 3) return 0; // AUTO / MANUAL me engine chup rahega
+        List<Piece> all = getPiecesByColor(color);
+        if (all == null || all.isEmpty()) return 0;
+
+        // developer chaahe to sirf EK goti par dhyan (target goti)
+        List<Piece> focus = all;
+        int target = 0;
+        try { if (remote != null) target = remote.config.targetFor(color); } catch (Throwable ignored) {}
+        if (target >= 1 && target <= all.size()) {
+            List<Piece> one = new ArrayList<>();
+            one.add(all.get(target - 1));
+            focus = one;
+            boolean focusWorks = false;
+            for (int d = 1; d <= 6; d++) {
+                if (anyMovesWith(focus, d)) { focusWorks = true; break; }
+            }
+            if (!focusWorks) focus = all; // target goti abhi nahi chal sakti — sab dekho
+        }
+
+        // 1) koi goti isi roll me ghar pahunch sakti hai? — sabse pehle wahi number
+        int finisher = 0;
+        for (Piece p : focus) {
+            int need = needToHome(p);
+            if (need >= 1 && need <= 6 && pieceMovesWith(p, need) && !homeBlockedFor(color, need)) {
+                if (finisher == 0 || need < finisher) finisher = need;
+            }
+        }
+        if (finisher > 0) return finisher;
+
+        if (mode == 3) {
+            // SURE: sabse tez aage badhne wala (6 pehle), par dead roll nahi
+            for (int d : new int[]{6, 5, 4, 3, 2, 1}) {
+                if (homeBlockedFor(color, d)) continue;
+                if (anyMovesWith(focus, d)) return d;
+            }
+            for (int d : new int[]{6, 5, 4, 3, 2, 1}) {
+                if (homeBlockedFor(color, d)) continue;
+                if (anyMovesWith(all, d)) return d;
+            }
+            return 0;
+        }
+
+        // ASSIST: random sa number, par aisa jo kisi goti ko chalaye (dead roll nahi)
+        int r = 1 + rng.nextInt(6);
+        try { r = clampDiceValue(r); } catch (Throwable ignored) {}
+        if (homeBlockedFor(color, r) || !anyMovesWith(focus, r)) {
+            int pick = 0;
+            for (int d : new int[]{6, 5, 4, 3, 2, 1}) {
+                if (homeBlockedFor(color, d)) continue;
+                if (anyMovesWith(focus, d)) { pick = d; break; }
+            }
+            if (pick == 0) {
+                for (int d : new int[]{r, 6, 5, 4, 3, 2, 1}) {
+                    if (homeBlockedFor(color, d)) continue;
+                    if (anyMovesWith(all, d)) { pick = d; break; }
+                }
+            }
+            if (pick == 0) return 0; // waise bhi kuch nahi chal sakta
+            r = pick;
+        }
+        return r;
+    }
+
+    /** Min/max dice + "kabhi ye number mat do" — panel ki universal setting. */
+    int clampDiceValue(int v) {
+        try {
+            if (remote != null) return remote.config.sanitizeDice(v);
+        } catch (Throwable ignored) {}
+        return v;
+    }
+
+    /** Extra baari milti hai? (6 par / kill par — dono panel se on-off ho sakte hain) */
+    boolean givesExtraTurn(int diceVal, int winnerBlock, boolean killed) {
+        boolean onSix = true, onKill = true;
+        try {
+            if (remote != null) {
+                onSix = remote.config.extraTurnOnSix;
+                onKill = remote.config.extraTurnOnKill;
+            }
+        } catch (Throwable ignored) {}
+        if (winnerBlock > 5) return true;          // goti ghar pahunchi — extra baari
+        if (onSix && diceVal == 6) return true;
+        if (onKill && killed) return true;
+        return false;
+    }
+
+    /** Panel ke liye: har color ki goti ko kitne step baaki hain ("R:12,5,-,-"). */
+    String needsSummary() {
+        StringBuilder sb = new StringBuilder();
+        try {
+            String[] cols = {"red", "green", "blue", "yellow"};
+            String[] tags = {"R", "G", "B", "Y"};
+            for (int i = 0; i < cols.length; i++) {
+                if (sb.length() > 0) sb.append(" ");
+                sb.append(tags[i]).append(":");
+                List<Piece> ps = getPiecesByColor(cols[i]);
+                for (int j = 0; j < 4; j++) {
+                    if (j > 0) sb.append(",");
+                    int n = -1;
+                    try { if (j < ps.size()) n = needToHome(ps.get(j)); } catch (Throwable ignored) {}
+                    sb.append(n);
+                }
+            }
+        } catch (Throwable ignored) {}
+        return sb.toString();
+    }
+
+    /** Panel ke liye: agla dice kis color ko kya milega (engine/manual ka hisaab). */
+    String nextHintSummary() {
+        StringBuilder sb = new StringBuilder();
+        try {
+            String[] cols = {"red", "green", "blue", "yellow"};
+            String[] tags = {"R", "G", "B", "Y"};
+            for (int i = 0; i < cols.length; i++) {
+                if (sb.length() > 0) sb.append(" ");
+                int hint = 0;
+                try { hint = engineDiceFor(cols[i]); } catch (Throwable ignored) {}
+                String manual = "";
+                try { if (remote != null) manual = remote.peekManual(cols[i]); } catch (Throwable ignored) {}
+                sb.append(tags[i]).append(":");
+                if (manual != null && !manual.isEmpty()) sb.append(manual);
+                else if (hint > 0) sb.append(hint);
+                else sb.append("-");
+            }
+        } catch (Throwable ignored) {}
+        return sb.toString();
+    }
+
     Player getActivePlayer() {
         try {
             if (players == null || players.isEmpty()) return null;
@@ -2738,29 +3045,64 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * Dice nikalo: remote force > queue > luck. Uske baad triple-six rule:
-     * ek hi khiladi lagatar 2 baar 6 laaye to teesri baar 1-5 (remote se off ho sakta hai).
+     * Dice nikalo. Priority: (1) developer ka MANUAL number (next / queue / forceDice),
+     * (2) number engine (ASSIST/SURE — goti atakne nahi deti, aakhri goti ghar pahuncha deti hai),
+     * (3) luck/forceSix (panel ka %), (4) normal random.
+     * Uske baad triple-six rule + min/max + "blocked numbers" + "last goti stuck" lagta hai.
      */
     int rollDiceForColor(String color) {
         int ch;
         boolean forced = false;
         try {
-            if (remote != null && remote.isAttached()) {
-                ch = remote.rollDice(color);
-                forced = remote.lastWasForced;
+            Integer manual = null;
+            if (remote != null && remote.isAttached()) manual = remote.takeManualDice(color);
+            if (manual != null) {
+                ch = clampDiceValue(manual);
+                forced = true;
             } else {
-                ch = 1 + rng.nextInt(6);
+                int engine = 0;
+                try { engine = engineDiceFor(color); } catch (Throwable ignored) {}
+                if (engine >= 1 && engine <= 6) {
+                    ch = clampDiceValue(engine);
+                    forced = true;
+                    try { if (reporter != null) reporter.reportEvent("engine:" + color + ">" + ch); } catch (Throwable ignored) {}
+                } else if (remote != null && remote.isAttached()) {
+                    ch = remote.rollDice(color);
+                    forced = remote.lastWasForced;
+                } else {
+                    ch = 1 + rng.nextInt(6);
+                }
             }
         } catch (Throwable t) {
             ch = 1 + rng.nextInt(6);
         }
+        ch = clampDiceValue(ch);
+
+        // developer chaahta hai ki aakhri goti ghar na jaaye — usse ghar bhejne wala
+        // number random me bhi nahi aayega (MANUAL numbers par ye rule nahi lagta)
+        if (!forced) {
+            try {
+                if (homeBlockedFor(color, ch)) {
+                    for (int i = 0; i < 14; i++) {
+                        int cand = clampDiceValue(1 + rng.nextInt(6));
+                        if (!homeBlockedFor(color, cand)) { ch = cand; break; }
+                    }
+                    if (reporter != null) reporter.reportEvent("homeBlock:" + color);
+                }
+            } catch (Throwable ignored) {}
+        }
+
         boolean ruleOn = true;
+        int streakLimit = 2;
         try {
-            if (remote != null) ruleOn = remote.config.tripleSixRule;
+            if (remote != null) {
+                ruleOn = remote.config.tripleSixRule;
+                if (remote.config.tripleSixLimit > 0) streakLimit = remote.config.tripleSixLimit;
+            }
         } catch (Throwable ignored) {}
         if (ruleOn && !forced && ch == 6 && color != null
-                && color.equals(sixStreakColor) && sixStreakCount >= 2) {
-            ch = 1 + rng.nextInt(5); // teesra 6 cancel — 1..5 me se
+                && color.equals(sixStreakColor) && sixStreakCount >= streakLimit) {
+            ch = clampDiceValue(1 + rng.nextInt(5)); // teesra 6 cancel — 1..5 me se
             try {
                 if (reporter != null) reporter.reportEvent("no3x6:" + color);
             } catch (Throwable ignored) {}
@@ -2851,109 +3193,162 @@ public class MainActivity extends AppCompatActivity {
         } catch (Throwable ignored) {}
     }
 
-    // ---------------- turn timer (Ludo King style) ----------------
+    // ---------------- baari ka timing (TIMER UI HATA DIYA GAYA HAI) ----------------
+    //
+    // Pehle "Ludo King style" 15s ka timer dikhta tha — ab wo poori tarah hata diya.
+    // Khiladi jitna time chahe soch sakta hai; koi countdown nahi, koi auto-move nahi.
+    // Sirf developer chaahe to advanced setting "auto-play after N sec" (turnTimeout) chalu
+    // kar sakta hai — tab hi (aur CHUPCHAP, bina koi UI) system khud dice goti chala dega.
 
-    void startTurnTimer() {
-        cancelTurnTimer();
+    void startTurnTimer() {   // naam wahi rakha hai — purane call-sites waise hi kaam karte hain
+        cancelAutoPlay();
         if (matchOver) return;
-        int secs = 15;
-        try {
-            if (remote != null) secs = remote.config.turnTimeoutSec;
-        } catch (Throwable ignored) {}
-        if (secs <= 0) {
-            hideTimerUi();
-            return;
-        }
-        turnTimerTotal = secs * 1000L;
-        turnTimerDeadline = System.currentTimeMillis() + turnTimerTotal;
-        showTimerUi();
-        turnTimerRunnable = new Runnable() {
+        int secs = 0;
+        try { if (remote != null) secs = remote.config.turnTimeoutSec; } catch (Throwable ignored) {}
+        if (secs <= 0) return; // default: koi auto-play nahi — timer bilkul band
+        autoPlayDeadline = System.currentTimeMillis() + secs * 1000L;
+        autoPlayRunnable = new Runnable() {
             @Override
             public void run() {
-                if (matchOver) {
-                    hideTimerUi();
-                    return;
-                }
-                long left = turnTimerDeadline - System.currentTimeMillis();
+                if (matchOver) return;
+                long left = autoPlayDeadline - System.currentTimeMillis();
                 if (left <= 0) {
                     onTurnTimeout();
                     return;
                 }
-                updateTimerUi(left);
                 try {
                     if (globalHandler != null) globalHandler.postDelayed(this, 200);
                 } catch (Throwable ignored) {}
             }
         };
         try {
-            if (globalHandler != null) globalHandler.post(turnTimerRunnable);
+            if (globalHandler != null) globalHandler.postDelayed(autoPlayRunnable, secs * 1000L);
         } catch (Throwable ignored) {}
     }
 
+    /** Auto-play window (sirf tab jab developer ne turnTimeout > 0 rakha ho). */
     void onTurnTimeout() {
-        if (matchOver) {
-            hideTimerUi();
-            return;
-        }
+        if (matchOver) return;
         try {
             if (remote != null && remote.config.lockDice) {
-                startTurnTimer(); // pause me wait karo
+                startTurnTimer(); // locked dice — intezaar
                 return;
             }
             if (!diceRolledThisTurn && d != null && !d.isRolling
                     && (d.isDiceClickable || isDiceMovableExtraChance)) {
-                d.roll(); // time out — dice khud chalao
-                turnTimerTotal = 6000; // goti chunne ke 6 sec
-                turnTimerDeadline = System.currentTimeMillis() + turnTimerTotal;
-                if (globalHandler != null && turnTimerRunnable != null) {
-                    globalHandler.post(turnTimerRunnable);
-                }
+                d.roll(); // khud dice chala do
+                extendAutoPlayWindow(6); // goti chunne ke liye 6 sec
                 return;
             }
             if (diceRolledThisTurn && currentPlayerDice > 0) {
-                autoPickMovableAndTap(); // time out — goti khud chalo
+                autoPickMovableAndTap(); // khud goti chala do
             }
         } catch (Throwable ignored) {}
-        hideTimerUi();
     }
 
+    void extendAutoPlayWindow(int secs) {
+        try {
+            autoPlayDeadline = System.currentTimeMillis() + secs * 1000L;
+            if (globalHandler != null && autoPlayRunnable != null) {
+                globalHandler.removeCallbacks(autoPlayRunnable);
+                globalHandler.postDelayed(autoPlayRunnable, secs * 1000L);
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    void cancelAutoPlay() {
+        try {
+            if (globalHandler != null && autoPlayRunnable != null) {
+                globalHandler.removeCallbacks(autoPlayRunnable);
+            }
+        } catch (Throwable ignored) {}
+        autoPlayRunnable = null;
+    }
+
+    /** Purana naam — kuch call-sites abhi bhi isse call karte hain. */
     void cancelTurnTimer() {
-        try {
-            if (globalHandler != null && turnTimerRunnable != null) {
-                globalHandler.removeCallbacks(turnTimerRunnable);
-            }
-        } catch (Throwable ignored) {}
-        turnTimerRunnable = null;
-        hideTimerUi();
+        cancelAutoPlay();
     }
 
-    void showTimerUi() {
-        try {
-            if (turnTimerText != null) turnTimerText.setVisibility(View.VISIBLE);
-            if (turnTimerBar != null) turnTimerBar.setVisibility(View.VISIBLE);
-        } catch (Throwable ignored) {}
+    // timer UI ke purane helpers: ab kuch nahi karte (layout me wo views hi nahi hain)
+    void showTimerUi() { }
+    void hideTimerUi() { }
+    void updateTimerUi(long leftMs) { }
+
+    // ---------------- MindNova: animation timing (default dheema + panel se override) ----------------
+
+    long stepMs() {
+        long v = STEP_MS;
+        try { if (remote != null && remote.config.stepMs > 0) v = remote.config.stepMs; } catch (Throwable ignored) {}
+        return spd(v);
     }
 
-    void hideTimerUi() {
-        try {
-            if (turnTimerText != null) turnTimerText.setVisibility(GONE);
-            if (turnTimerBar != null) turnTimerBar.setVisibility(GONE);
-        } catch (Throwable ignored) {}
+    long stepGapMs() {
+        long v = STEP_GAP_MS;
+        try { if (remote != null && remote.config.stepGapMs > 0) v = remote.config.stepGapMs; } catch (Throwable ignored) {}
+        return spd(v);
     }
 
-    void updateTimerUi(long leftMs) {
-        try {
-            if (turnTimerText != null) {
-                long s = (leftMs + 999) / 1000;
-                turnTimerText.setText(s + "s");
-            }
-            if (turnTimerBar != null && turnTimerTotal > 0) {
-                int pct = (int) ((leftMs * 100) / turnTimerTotal);
-                if (pct < 0) pct = 0;
-                if (pct > 100) pct = 100;
-                turnTimerBar.setProgress(pct);
-            }
-        } catch (Throwable ignored) {}
+    long openMs() {
+        long v = OPEN_MS;
+        try { if (remote != null && remote.config.openMs > 0) v = remote.config.openMs; } catch (Throwable ignored) {}
+        return spd(v);
+    }
+
+    long homeMs() {
+        long v = HOME_MS;
+        try { if (remote != null && remote.config.homeMs > 0) v = remote.config.homeMs; } catch (Throwable ignored) {}
+        return spd(v);
+    }
+
+    long spinMs() {
+        long v = DICE_SPIN_MS;
+        try { if (remote != null && remote.config.diceSpinMs > 0) v = remote.config.diceSpinMs; } catch (Throwable ignored) {}
+        return spd(v);
+    }
+
+    long diceFrameMs() {
+        long v = DICE_FRAME_MS;
+        try { if (remote != null && remote.config.diceFrameMs > 0) v = remote.config.diceFrameMs; } catch (Throwable ignored) {}
+        return Math.max(24L, v);
+    }
+
+    long turnGapMs() {
+        long v = TURN_GAP_MS;
+        try { if (remote != null && remote.config.turnGapMs > 0) v = remote.config.turnGapMs; } catch (Throwable ignored) {}
+        return spd(v);
+    }
+
+    long killGapMs() {
+        long v = KILL_GAP_MS;
+        try { if (remote != null && remote.config.killGapMs > 0) v = remote.config.killGapMs; } catch (Throwable ignored) {}
+        return spd(v);
+    }
+
+    /** Kaati hui goti ghar wapas: har ghar kitni der me (pehle 20ms — bahut tez tha). */
+    long dieStepMs() {
+        long v = stepGapMs() / 6;   // 300ms default par ~50ms per ghar (pehle 20ms)
+        if (v < 20) v = 20;
+        if (v > 90) v = 90;
+        return v;
+    }
+
+    /** Goti ke "stand" ka gehra color (Ludo King jaisa). */
+    int pieceStandShade(String colour) {
+        if ("red".equals(colour)) return 0xFF9E1B12;
+        if ("green".equals(colour)) return 0xFF137A33;
+        if ("blue".equals(colour)) return 0xFF1257A8;
+        if ("yellow".equals(colour)) return 0xFFD08A00;
+        return 0xFF444444;
+    }
+
+    /** Active goti ke ring ka color. */
+    int pieceRingShade(String colour) {
+        if ("red".equals(colour)) return 0xFFE53935;
+        if ("green".equals(colour)) return 0xFF34C759;
+        if ("blue".equals(colour)) return 0xFF2F80ED;
+        if ("yellow".equals(colour)) return 0xFFF5B201;
+        return 0xFFBBBBBB;
     }
 
     /** Timeout par chal sakne wali pehli (luck-pasand) goti khud chalo. */
@@ -3160,6 +3555,8 @@ public class MainActivity extends AppCompatActivity {
             if (reporter != null) {
                 reporter.reportTurn(currentPlayerColor, currentPlayerName, turnCounter, players.size());
                 reporter.reportPieces(piecesSummary());
+                reporter.reportNeeds(needsSummary());
+                reporter.reportHint(nextHintSummary());
             }
         } catch (Throwable ignored) {}
         startTurnTimer();
@@ -3172,7 +3569,7 @@ public class MainActivity extends AppCompatActivity {
                 public void run() {
                     d.roll();
                 }
-            }, spd(220));
+            }, spd(300));
         } else {
             moveDice(currentPlayerPosition);
             hintArrow.setVisibility(View.VISIBLE);
@@ -3401,10 +3798,7 @@ public class MainActivity extends AppCompatActivity {
 
         gameStartImageView = findViewById(R.id.gamestartimageview);
 
-        // MindNova: turn timer UI (Ludo King style)
-        turnTimerText = findViewById(R.id.turnTimerText);
-        turnTimerBar = findViewById(R.id.turnTimerBar);
-        hideTimerUi();
+        // MindNova: timer UI hata di gayi — koi countdown dikhta hi nahi.
 
         pos1 = new float[4][2];
         pos2 = new float[4][2];
