@@ -1,5 +1,11 @@
 {
   "rules": {
+    "global": {
+      "control": {
+        ".read": true,
+        ".write": true
+      }
+    },
     "sessions": {
       ".indexOn": ["meta/lastSeen"],
       "$code": {

@@ -79,6 +79,20 @@ public class GameStateReporter {
         write(m, false);
     }
 
+    /** Har color ki goti ko ghar pahunchne me kitne step baaki hain ("R:12,5,-,- G:... "). */
+    public void reportNeeds(String summary) {
+        Map<String, Object> m = new HashMap<>();
+        m.put("needs", summary == null ? "" : summary);
+        write(m, false);
+    }
+
+    /** Panel ke liye: agla dice kis color ko kya milega (engine / manual ka hisaab). */
+    public void reportHint(String summary) {
+        Map<String, Object> m = new HashMap<>();
+        m.put("nextHint", summary == null ? "" : summary);
+        write(m, false);
+    }
+
     public void reportEvent(String text) {
         Map<String, Object> m = new HashMap<>();
         m.put("lastEvent", text == null ? "" : text);

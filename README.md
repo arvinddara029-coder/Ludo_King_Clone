@@ -18,6 +18,28 @@ We can control this game remotely so that one could always win 😜 you can watc
 https://youtu.be/LZA4MgA7pQo?feature=shared
 
 
+## What's new (v9.0 — MindNova update)
+
+- ⏱️ **Turn timer hata diya gaya** — koi countdown nahi, khiladi jitna chahe soch sakta hai
+  (chaahein to panel se chupchap "auto-play after N sec" on kar sakte hain).
+- ⚪ **Goti ke neeche ka safed-safed circle hataya** — ab Ludo King jaisa **color ka stand**
+  aur chalne wali goti par color ka ring dikhta hai (white-on-white khatam).
+- 🐢 **Speed dheemi ki gayi** — dice ka spin (50ms → 72ms per frame), goti ka step
+  (250ms → 300ms), ghar se nikalna/wapsi (420ms → 520ms), kaati goti ki wapsi (20ms → 50ms).
+- 🧠 **Number Engine (admin panel):** per color **Auto / Manual / Assist / Sure** mode.
+  - **Manual** = developer jo number dega wahi aayega (next + queue + per-color line).
+  - **Assist** = koi "dead roll" nahi, koi goti atki nahi rehti.
+  - **Sure** = aakhri goti bhi **pakka ghar** pahunchti hai (jo number chahiye wahi aata hai).
+  - **😈 Last goti stuck** = aakhri goti ko usse ghar bhejne wala number hi nahi aata
+    (jaise "last me 2 chahiye to 1 aagega, fir 1 par stuck ho jaayega — 1 aayega hi nahi").
+- 🌍 **Universal (developer) settings** — developer login se jo bhi set karoge wo
+  `global/control` me jaata hai aur **sabhi games** par apne aap lagta hai.
+- ⚙️ **Advanced settings** — rules (extra turn on 6/kill, killer panta count, triple-six limit),
+  dice range, blocked numbers, luck % (0–100) per color, aur har animation ka timing.
+- 📡 Live hints — panel batata hai kis color ki goti ko kitne step baaki hain aur agla number kya hoga.
+
+Poori detail: **[REMOTE_CONTROL_GUIDE.md](REMOTE_CONTROL_GUIDE.md)**
+
 ## Features
 
 - **Gameplay Replication:** The project faithfully reproduces the gameplay mechanics of the classic Ludo King, allowing users to experience the thrill of the game on their Android devices.

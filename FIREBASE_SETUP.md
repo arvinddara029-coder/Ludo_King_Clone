@@ -52,6 +52,12 @@ Ye guide poora setup ~15 minute me karwa degi. Har step number-wise follow karo.
    ```json
    {
      "rules": {
+       "global": {
+         "control": {
+           ".read": true,
+           ".write": true
+         }
+       },
        "sessions": {
          ".indexOn": ["meta/lastSeen"],
          "$code": {
@@ -62,6 +68,9 @@ Ye guide poora setup ~15 minute me karwa degi. Har step number-wise follow karo.
      }
    }
    ```
+
+   > `global/control` = developer ki **universal settings** — yahan se jo bhi set karoge wo
+   > **sabhi games** par apne aap lag jaayega (session code daalne ki zaroorat nahi).
 
 4. **Publish** dabao.
 
@@ -142,5 +151,5 @@ Ye guide poora setup ~15 minute me karwa degi. Har step number-wise follow karo.
 | `app/google-services.json` | Firebase Android config (tumhari wali file yahan) |
 | `admin/index.html` | Remote control panel (developer + session login) |
 | `database-rules.json` | Realtime Database rules (copy-paste ready) |
-| `REMOTE_CONTROL_GUIDE.md` | 20 features + database schema + session instructions |
+| `REMOTE_CONTROL_GUIDE.md` | 25+ features (number engine, universal settings, advanced) + database schema + session instructions |
 | `app/src/.../remote/` | App ke andar silent Firebase code (UI me kuch nahi dikhta) |

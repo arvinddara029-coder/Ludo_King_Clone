@@ -40,17 +40,21 @@
   .btn.ghost{background:var(--card2);color:var(--txt);border:1px solid var(--line);box-shadow:none;font-weight:600}
   .btn.danger{background:linear-gradient(180deg,#ff7b7b,#e54848);color:#fff;box-shadow:0 3px 0 #7c1f1f}
   .btn.small{padding:7px 12px;font-size:13px}
+  .btn.wide{width:100%;text-align:center}
   .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
   .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
-  @media(max-width:760px){.grid2,.grid4{grid-template-columns:1fr 1fr}}
+  @media(max-width:760px){.grid2,.grid3,.grid4{grid-template-columns:1fr 1fr}}
   @media(max-width:460px){.grid4{grid-template-columns:1fr 1fr}}
   .dicebtns{display:flex;gap:8px;flex-wrap:wrap}
   .dicebtn{width:52px;height:52px;border-radius:12px;border:2px solid var(--line);background:var(--card2);color:var(--txt);font-size:20px;font-weight:900;cursor:pointer}
   .dicebtn.on{border-color:var(--gold);background:#3a2f10;box-shadow:0 0 12px #f5b20155}
+  .dicebtn.tiny{width:38px;height:38px;font-size:16px;border-radius:10px}
   .seg{display:flex;gap:6px}
   .seg button{flex:1;padding:9px 4px;border-radius:9px;border:1px solid var(--line);background:var(--card2);color:var(--dim);font-weight:700;cursor:pointer;font-size:13px}
   .seg button.on{color:#fff;border-color:var(--gold);background:#3a2f10}
+  .seg.seg4 button{font-size:12px;padding:8px 2px}
   .switchrow{display:flex;align-items:center;justify-content:space-between;gap:10px;background:#101828;border:1px solid var(--line);border-radius:10px;padding:9px 12px;margin-top:8px}
   .switchrow span{font-size:14px}
   .switchrow small{display:block;color:var(--dim);font-size:12px}
@@ -75,12 +79,18 @@
   .foot{color:var(--dim);font-size:12px;text-align:center;padding:18px}
   input[type=range]{width:100%;accent-color:var(--gold)}
   .hidden{display:none!important}
+  .needchip{display:inline-block;background:#0d1526;border:1px solid var(--line);border-radius:8px;padding:3px 8px;font-size:12px;margin:2px 4px 2px 0}
+  .needchip.live{border-color:var(--ok);color:#9df0c3}
+  details.adv{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:#101828;margin-top:10px}
+  details.adv summary{cursor:pointer;font-weight:800;color:var(--gold)}
+  .hintbox{background:#101a2c;border:1px dashed #3b4d75;border-radius:10px;padding:10px;font-size:13px;margin-top:8px}
+  .tagline{font-size:12px;color:var(--dim);margin-top:6px}
 </style>
 </head>
 <body>
 <header>
   <div class="logo">L</div>
-  <div><h1>MindNova Ludo — Remote Control</h1><small>admin/index.html • Firebase Realtime Database • v8.1</small></div>
+  <div><h1>MindNova Ludo — Remote Control</h1><small>admin/index.html • Firebase Realtime Database • v9.0 (universal + advanced)</small></div>
   <div class="sp"></div>
   <button class="btn ghost small hidden" id="logoutBtn" onclick="doLogout()">Logout</button>
 </header>
@@ -137,6 +147,7 @@
         <li><code>google-services.json</code> file <code>app/</code> folder me rakho aur app rebuild karo.</li>
         <li>Is file (<code>admin/index.html</code>) me sabse neeche <code>&lt;script&gt;</code> me <code>FIREBASE_CONFIG</code> + <code>DEVELOPER_UID</code> bharo (Firebase Console → Project Settings + Authentication → user UID).</li>
         <li>Yahan Developer Login karo — <b>saare live sessions</b> ki list dikhegi, kisi par bhi Control dabao.</li>
+        <li>Neeche <b>🌍 Universal Settings</b> section se jo bhi setting badloge wo <b>sabhi games</b> par apne aap lag jaayegi (bina code daale).</li>
       </ol>
     </div>
   </section>
@@ -151,6 +162,18 @@
       </div>
       <div id="sessList"><p class="sub">Loading…</p></div>
     </div>
+
+    <div class="card">
+      <div class="row">
+        <div><h2 style="margin:0">🌍 Universal Settings (sabhi games par)</h2>
+        <p class="sub" style="margin:0">Yahan ki har setting <b>har session</b> me apne aap lagti hai. Session ki apni setting isse override karti hai — isliye pehle yahan default set karo, phir kisi ek game ko alag se badlo.</p></div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn small" id="pushGlobalBtn">📤 Universal → sabhi live sessions par bhej do</button>
+        <button class="btn ghost small" id="resetGlobalBtn">🧹 Universal reset</button>
+      </div>
+    </div>
+    <div id="globalControlWrap"></div>
     <div id="devControlWrap"></div>
   </section>
 
@@ -167,7 +190,7 @@
     <div id="sessControlWrap"></div>
   </section>
 
-  <div class="foot">MindNova • Poora game silent control — app ki UI me kuch extra nahi dikhta • <span id="connState">connecting…</span></div>
+  <div class="foot">MindNova • Timer hata diya gaya • Poora game silent control — app ki UI me kuch extra nahi dikhta • <span id="connState">connecting…</span></div>
 </div>
 
 <script>
@@ -194,18 +217,20 @@ const DEVELOPER_UID = "PASTE_DEVELOPER_UID";
 /* ================= setup khatm ================= */
 
 const COLORS = [
-  {id:'red',    hi:'Laal 🔴',  css:'var(--red)'},
-  {id:'green',  hi:'Hara 🟢',  css:'var(--green)'},
-  {id:'blue',   hi:'Neela 🔵', css:'var(--blue)'},
-  {id:'yellow', hi:'Peela 🟡', css:'var(--yellow)'},
+  {id:'red',    hi:'Laal 🔴',  css:'var(--red)',    tag:'R'},
+  {id:'green',  hi:'Hara 🟢',  css:'var(--green)',  tag:'G'},
+  {id:'blue',   hi:'Neela 🔵', css:'var(--blue)',   tag:'B'},
+  {id:'yellow', hi:'Peela 🟡', css:'var(--yellow)', tag:'Y'},
 ];
 const LUCKS = [['low','Low 📉'],['normal','Normal'],['high','High 📈']];
 const PLUCKS = [['0','😈 Cursed'],['1','📉 Low'],['2','Normal'],['3','😇 Blessed']];
+const MODES = [['0','Auto'],['1','Manual'],['2','Assist'],['3','Sure 🏁']];
 
 let db = null, auth = null, mode = null;       // 'dev' | 'sess'
-let currentCode = null, ctrlCache = {};
-let stateRef = null, metaRef = null, ctrlRef = null;
-let stateCb = null, metaCb = null, ctrlCb = null, sessCb = null;
+let currentCode = null, ctrlCache = {}, globalCache = {};
+let stateRef = null, metaRef = null, ctrlRef = null, globalRef = null;
+let stateCb = null, metaCb = null, ctrlCb = null, globalCb = null, sessCb = null;
+let liveNeeds = {}, liveHint = {};
 
 const $ = id => document.getElementById(id);
 function show(el, msg){ el.style.display='block'; el.textContent = msg; }
@@ -303,6 +328,7 @@ function doLogout(){
   $('logoutBtn').classList.add('hidden');
   $('devControlWrap').innerHTML = '';
   $('sessControlWrap').innerHTML = '';
+  $('globalControlWrap').innerHTML = '';
 }
 
 function enterDev(user){
@@ -312,6 +338,7 @@ function enterDev(user){
   $('devDash').classList.remove('hidden');
   $('logoutBtn').classList.remove('hidden');
   $('devUserLine').textContent = 'Logged in: ' + (user.email || user.uid);
+  bindGlobal($('globalControlWrap'));
   refreshSessions();
 }
 
@@ -322,7 +349,7 @@ function enterSession(code){
   $('devDash').classList.add('hidden');
   $('sessDash').classList.remove('hidden');
   $('sessTitle').textContent = code;
-  bindSession(code, $('sessControlWrap'));
+  bindSession(code, $('sessControlWrap'), 'sess');
 }
 
 /* ---------- developer: sessions list ---------- */
@@ -363,11 +390,21 @@ function refreshSessions(){
 function devControl(code){
   currentCode = code;
   refreshSessions();
-  bindSession(code, $('devControlWrap'));
+  bindSession(code, $('devControlWrap'), 'sess');
   setTimeout(()=>{ $('devControlWrap').scrollIntoView({behavior:'smooth'}); }, 100);
 }
 
-/* ---------- control panel ---------- */
+/* ---------- reference helpers ---------- */
+function cref(scope, code, key){
+  if(scope === 'global') return db.ref('global/control/' + key);
+  return db.ref('sessions/' + code + '/control/' + key);
+}
+function nref(scope, code){
+  if(scope === 'global') return db.ref('global/control');
+  return db.ref('sessions/' + code + '/control');
+}
+
+/* ---------- bind: session ---------- */
 function detachSession(){
   try{ if(stateRef && stateCb) stateRef.off('value', stateCb); }catch(e){}
   try{ if(metaRef && metaCb) metaRef.off('value', metaCb); }catch(e){}
@@ -375,25 +412,95 @@ function detachSession(){
   stateRef = metaRef = ctrlRef = null;
 }
 
-function bindSession(code, wrap){
-  detachSession();
-  ctrlCache = {};
-  wrap.innerHTML = controlHtml(code);
-  bindControlEvents(wrap, code);
-
+function bindSession(code, wrap, scope){
+  wrap.innerHTML = controlHtml(scope, code);
+  bindControlEvents(wrap, scope, code);
+  bindGlobalButtons();
   stateRef = db.ref('sessions/' + code + '/state');
   metaRef = db.ref('sessions/' + code + '/meta');
   ctrlRef = db.ref('sessions/' + code + '/control');
-
   stateCb = stateRef.on('value', s => renderLive(code));
   metaCb = metaRef.on('value', s => renderLive(code));
   ctrlCb = ctrlRef.on('value', s => {
     ctrlCache = s.val() || {};
-    renderControl(wrap, ctrlCache);
+    renderControl(wrap, scope, ctrlCache);
   });
 }
 
-function controlHtml(code){
+function bindGlobal(wrap){
+  wrap.innerHTML = controlHtml('global', '');
+  bindControlEvents(wrap, 'global', '');
+  bindGlobalButtons();
+  globalRef = db.ref('global/control');
+  if(globalCb){ try{ globalRef.off('value', globalCb); }catch(e){} }
+  globalCb = globalRef.on('value', s => {
+    globalCache = s.val() || {};
+    renderControl(wrap, 'global', globalCache);
+  });
+}
+
+function bindGlobalButtons(){
+  const p = $('pushGlobalBtn'), r = $('resetGlobalBtn');
+  if(p && !p.dataset.bound){
+    p.dataset.bound = '1';
+    p.addEventListener('click', () => {
+      if(!confirm('Universal settings sabhi live sessions par bhej doon? (jo sessions abhi chal rahe hain unme turant lag jaayega)')) return;
+      db.ref('sessions').once('value').then(snap => {
+        const g = globalCache || {};
+        let n = 0;
+        snap.forEach(ch => {
+          const code = ch.key;
+          const m = ch.child('meta').val() || {};
+          if(m.status !== 'online') return;
+          const upd = {};
+          Object.keys(g).forEach(k => { if(k.indexOf('cmd_') !== 0 && k !== 'forceWin' && k !== 'msg') upd[k] = g[k]; });
+          db.ref('sessions/' + code + '/control').update(upd);
+          n++;
+        });
+        alert(n + ' live session par bhej diya.');
+      }).catch(e => alert('Error: ' + e.message));
+    });
+  }
+  if(r && !r.dataset.bound){
+    r.dataset.bound = '1';
+    r.addEventListener('click', () => {
+      if(confirm('Universal settings default par reset karoon?')) {
+        nref('global','').set(defaultSettings());
+      }
+    });
+  }
+}
+
+/* ---------- HTML ---------- */
+function defaultSettings(){
+  const d = {
+    nextDice: 0, diceQueue: '', needSixToOpen: true, tripleSixRule: true, tripleSixLimit: 2,
+    safeAll: false, lockDice: false, extraTurnOnSix: true, extraTurnOnKill: true, pantaPieces: 0,
+    minDice: 1, maxDice: 6, blockNumbers: '', gameSpeed: 1.0, turnTimeout: 0,
+    stepMs: 0, stepGapMs: 0, openMs: 0, homeMs: 0, diceSpinMs: 0, diceFrameMs: 0, turnGapMs: 0, killGapMs: 0,
+    cmd_extraTurn: false, cmd_skipTurn: false, cmd_reset: false, cmd_end: false, forceWin: '', msg: ''
+  };
+  COLORS.forEach(c => {
+    d['forceDice_' + c.id] = 0; d['luck_' + c.id] = 'normal'; d['luckPct_' + c.id] = -1;
+    d['forceSix_' + c.id] = false; d['blockSix_' + c.id] = false;
+    d['protect_' + c.id] = false; d['auto_' + c.id] = false;
+    d['pieceLuck_' + c.id] = '2,2,2,2';
+    d['mode_' + c.id] = 0; d['blockHome_' + c.id] = false; d['targetPiece_' + c.id] = 0;
+    d['queueFor_' + c.id] = '';
+  });
+  return d;
+}
+
+function needsFor(tag){
+  const raw = liveNeeds[tag];
+  if(raw === undefined || raw === null || raw === '') return '';
+  return String(raw);
+}
+
+function controlHtml(scope, code){
+  const isGlobal = scope === 'global';
+  const title = isGlobal ? '🌍 Universal Control (sabhi games)' : ('🎮 Session ' + esc(code));
+
   let colorCards = '';
   COLORS.forEach(c => {
     let goti = '';
@@ -404,156 +511,348 @@ function controlHtml(code){
         + '</select></div>';
     }
     colorCards += '<div class="colorcard">'
-      + '<div class="chead"><span class="dot" style="background:' + c.css + '"></span>' + c.hi + '</div>'
-      + '<label class="lbl">Force dice (1 dabao = agla dice fix)</label>'
+      + '<div class="chead"><span class="dot" style="background:' + c.css + '"></span>' + c.hi
+        + (isGlobal ? '' : '<span style="margin-left:auto;font-size:12px;color:var(--dim)" data-need="' + c.tag + '"></span>') + '</div>'
+
+      + '<label class="lbl">🍀 Luck % : <b data-luckval="' + c.id + '">—</b> <small>(0 = sabse ghatiya, 50 = barabar, 100 = sabse lucky)</small></label>'
+      + '<input type="range" min="0" max="100" step="1" value="50" data-luckpct="' + c.id + '">'
+      + '<div class="row" style="margin-top:6px">'
+        + '<button class="btn ghost small" data-luckpct-off="' + c.id + '">% band (low/normal/high chalao)</button>'
+        + '<div class="seg" data-cluck="' + c.id + '" style="flex:1">'
+        + LUCKS.map(l => '<button data-val="' + l[0] + '">' + l[1] + '</button>').join('') + '</div>'
+      + '</div>'
+
+      + '<label class="lbl">🎯 Kaun number aaye? (number engine)</label>'
+      + '<div class="seg seg4" data-cmode="' + c.id + '">'
+        + MODES.map(m => '<button data-val="' + m[0] + '">' + m[1] + '</button>').join('') + '</div>'
+      + '<p class="tagline">Auto = normal random • Manual = sirf neeche wale number • Assist = dead roll nahi (koi goti atakti nahi) • Sure = goti tezi se ghar (aakhri goti bhi pahunch jaati hai)</p>'
+
+      + '<label class="lbl">✍️ Agla number khud laga do (is color ke liye number line)</label>'
+      + '<div class="row"><div class="dicebtns" data-qfor="' + c.id + '">'
+        + [1,2,3,4,5,6].map(n => '<button class="dicebtn tiny" data-val="' + n + '">' + n + '</button>').join('')
+        + '</div>'
+        + '<input type="text" data-qforin="' + c.id + '" placeholder="line: 6,6,1,2" style="max-width:150px">'
+        + '<button class="btn small" data-qforapply="' + c.id + '">Line set</button>'
+        + '<button class="btn ghost small" data-qforclear="' + c.id + '">Clear</button></div>'
+      + '<p class="tagline" data-qfornow="' + c.id + '"></p>'
+
+      + '<label class="lbl">Force dice (ek hi baar)</label>'
       + '<select data-cset="forceDice" data-color="' + c.id + '">'
-      + '<option value="0">Auto 🎲</option><option value="1">1</option><option value="2">2</option>'
-      + '<option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option></select>'
-      + '<label class="lbl">Luck (dice ka wazan)</label>'
-      + '<div class="seg" data-cluck="' + c.id + '">'
-      + LUCKS.map(l => '<button data-val="' + l[0] + '">' + l[1] + '</button>').join('') + '</div>'
+        + '<option value="0">Auto 🎲</option><option value="1">1</option><option value="2">2</option>'
+        + '<option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option></select>'
+
+      + '<label class="lbl">🎯 Target goti (engine isi goti par dhyan dega)</label>'
+      + '<select data-cset="targetPiece" data-color="' + c.id + '">'
+        + '<option value="0">Saari gotiyan</option><option value="1">Goti 1</option><option value="2">Goti 2</option>'
+        + '<option value="3">Goti 3</option><option value="4">Goti 4</option></select>'
+
       + '<div class="switchrow"><span>Force 6<small>har baar 6 aayega</small></span><span class="switch"><input type="checkbox" data-ctoggle="forceSix" data-color="' + c.id + '"><span class="knob"></span></span></div>'
       + '<div class="switchrow"><span>Block 6<small>kabhi 6 nahi aayega</small></span><span class="switch"><input type="checkbox" data-ctoggle="blockSix" data-color="' + c.id + '"><span class="knob"></span></span></div>'
       + '<div class="switchrow"><span>🛡️ Kill protection<small>ye color kabhi marega nahi</small></span><span class="switch"><input type="checkbox" data-ctoggle="protect" data-color="' + c.id + '"><span class="knob"></span></span></div>'
       + '<div class="switchrow"><span>🤖 Auto-play<small>bot ki tarah khud khelega</small></span><span class="switch"><input type="checkbox" data-ctoggle="auto" data-color="' + c.id + '"><span class="knob"></span></span></div>'
+      + '<div class="switchrow"><span>🚫 Aakhri goti ghar na jaaye<small>ON = us aakhri goti ko ghar pahunchane wala number HI nahi aayega (stuck)</small></span><span class="switch"><input type="checkbox" data-ctoggle="blockHome" data-color="' + c.id + '"><span class="knob"></span></span></div>'
+
       + '<label class="lbl">Per-goti luck (kaunsi goti lucky?)</label>'
       + '<div class="grid2">' + goti + '</div>'
+
+      + '<h3 style="font-size:13px;margin:12px 0 6px">⚡ Ek-tap presets</h3>'
+      + '<div class="row">'
+        + '<button class="btn ghost small" data-preset="stuck" data-color="' + c.id + '">😈 Last goti stuck</button>'
+        + '<button class="btn ghost small" data-preset="home" data-color="' + c.id + '">🏁 Pakka ghar</button>'
+        + '<button class="btn ghost small" data-preset="strong" data-color="' + c.id + '">🔥 Strong</button>'
+        + '<button class="btn ghost small" data-preset="safe" data-color="' + c.id + '">🛡️ Safe</button>'
+        + '<button class="btn ghost small" data-preset="fair" data-color="' + c.id + '">🎲 Normal</button>'
+      + '</div>'
       + '</div>';
   });
 
   return ''
-  + '<div class="card"><h2>📡 Live Game — <span style="color:var(--gold);letter-spacing:2px">' + esc(code) + '</span></h2>'
-  + '<div class="live" id="liveBox">connecting…</div></div>'
+  + (isGlobal ? '' :
+      '<div class="card"><h2>📡 Live Game — <span style="color:var(--gold);letter-spacing:2px">' + esc(code) + '</span></h2>'
+      + '<div class="live" id="liveBox">connecting…</div>'
+      + '<div class="hintbox" id="hintBox">Hints loading…</div></div>')
 
-  + '<div class="card"><h2>🎲 1–2. Agla Dice Control</h2><p class="sub">Agla dice fix karo ya poori line set karo. App me kuch nahi dikhega — silent control.</p>'
-  + '<h3>Agla dice (one-shot)</h3><div class="dicebtns" id="nextDiceBtns">'
+  + '<div class="card"><h2>' + title + '</h2><p class="sub">Sab kuch silent hai — app me kuch extra nahi dikhta. ' + (isGlobal ? 'Ye settings HAR game par lagti hain.' : 'Ye settings sirf is session par.') + '</p>'
+
+  + '<h3>🎲 Agla dice (sabke liye)</h3><div class="dicebtns" id="nextDiceBtns">'
   + '<button class="dicebtn" data-set="nextDice" data-val="0">⚪</button>'
   + [1,2,3,4,5,6].map(n => '<button class="dicebtn" data-set="nextDice" data-val="' + n + '">' + n + '</button>').join('')
-  + '</div><p class="sub">⚪ = Auto (koi fix nahi)</p>'
+  + '</div><p class="sub">⚪ = Auto (koi fix nahi) — jo bhi pehle dice chalega usi par lagega</p>'
+
   + '<h3>Dice queue (aanewali line, comma me)</h3>'
   + '<div class="row"><input type="text" id="queueIn" placeholder="e.g. 6,6,3,1" style="flex:1;min-width:160px">'
   + '<button class="btn small" data-apply="diceQueue">Set Queue</button>'
   + '<button class="btn ghost small" data-clear="diceQueue">Clear</button></div>'
-  + '<p class="sub" id="queueNow"></p></div>'
+  + '<p class="sub" id="queueNow"></p>'
 
-  + '<div class="card"><h2>🎨 3–7. Har Color ka Control</h2><p class="sub">Force dice • luck • har-baar-6 • kabhi-6-nahi • protection • auto-play • goti luck</p>'
+  + '<label class="lbl">Dice range (kitne number aa sakte hain)</label>'
+  + '<div class="row"><input type="number" min="1" max="6" data-num="minDice" style="max-width:90px"> '
+  + '<span class="sub" style="margin:0">se</span> <input type="number" min="1" max="6" data-num="maxDice" style="max-width:90px"></div>'
+  + '<label class="lbl">🚫 Ye number kabhi mat do (comma me, e.g. 6,5)</label>'
+  + '<div class="row"><input type="text" data-str="blockNumbers" placeholder="e.g. 6,5" style="flex:1;min-width:160px">'
+  + '<button class="btn small" data-strapply="blockNumbers">Set</button></div>'
+  + '</div>'
+
+  + '<div class="card"><h2>🎨 Har Color ka Control</h2><p class="sub">Luck % • number engine (auto/manual/assist/sure) • khud number lagao • target goti • protection • auto-play • last goti stuck</p>'
+  + '<div class="row" style="margin-bottom:10px">'
+  + '<button class="btn ghost small" data-allmode="2">Sabko Assist</button>'
+  + '<button class="btn ghost small" data-allmode="3">Sabko Sure</button>'
+  + '<button class="btn ghost small" data-allmode="0">Sabko Auto</button>'
+  + '<button class="btn ghost small" data-allmode="1">Sabko Manual</button>'
+  + '</div>'
   + '<div class="grid2">' + colorCards + '</div></div>'
 
-  + '<div class="card"><h2>⚡ 8–11. Turant Commands</h2><p class="sub">Dabate hi game me lagu (one-tap).</p>'
-  + '<div class="row">'
-  + '<button class="btn small" data-cmd="cmd_extraTurn">➕ Extra Turn</button>'
-  + '<button class="btn ghost small" data-cmd="cmd_skipTurn">⏭ Skip Turn</button>'
-  + '<button class="btn ghost small" data-cmd="cmd_reset">🔄 Reset Match</button>'
-  + '<button class="btn danger small" data-cmd="cmd_end">🏁 End Match</button>'
-  + '</div>'
-  + '<div class="switchrow"><span>🔒 Lock dice (pause jaisa)<small>ON rahe to koi dice nahi chalega</small></span><span class="switch"><input type="checkbox" data-toggle="lockDice"><span class="knob"></span></span></div>'
-  + '<h3>🏆 Force winner (turant jeeta do)</h3><div class="row">'
-  + COLORS.map(c => '<button class="btn ghost small" data-win="' + c.id + '">' + c.hi + '</button>').join('')
-  + '</div>'
-  + '<h3>💬 Message bhejo (game me toast dikhega)</h3>'
-  + '<div class="row"><input type="text" id="msgIn" placeholder="e.g. Shabaash! 👏" style="flex:1;min-width:160px">'
-  + '<button class="btn small" id="msgBtn">Bhejo</button></div></div>'
+  + (isGlobal ? '' :
+      '<div class="card"><h2>⚡ Turant Commands</h2><p class="sub">Dabate hi game me lagu (one-tap).</p>'
+      + '<div class="row">'
+      + '<button class="btn small" data-cmd="cmd_extraTurn">➕ Extra Turn</button>'
+      + '<button class="btn ghost small" data-cmd="cmd_skipTurn">⏭ Skip Turn</button>'
+      + '<button class="btn ghost small" data-cmd="cmd_reset">🔄 Reset Match</button>'
+      + '<button class="btn danger small" data-cmd="cmd_end">🏁 End Match</button>'
+      + '</div>'
+      + '<div class="switchrow"><span>🔒 Lock dice (pause jaisa)<small>ON rahe to koi dice nahi chalega</small></span><span class="switch"><input type="checkbox" data-toggle="lockDice"><span class="knob"></span></span></div>'
+      + '<h3>🏆 Force winner (turant jeeta do)</h3><div class="row">'
+      + COLORS.map(c => '<button class="btn ghost small" data-win="' + c.id + '">' + c.hi + '</button>').join('')
+      + '</div>'
+      + '<h3>💬 Message bhejo (game me toast dikhega)</h3>'
+      + '<div class="row"><input type="text" id="msgIn" placeholder="e.g. Shabaash! 👏" style="flex:1;min-width:160px">'
+      + '<button class="btn small" id="msgBtn">Bhejo</button></div></div>')
 
-  + '<div class="card"><h2>📏 12–16. Rules + Speed + Timer</h2>'
+  + '<div class="card"><h2>📏 Rules</h2>'
   + '<div class="switchrow"><span>6 par hi goti khulegi<small>OFF = kisi bhi dice par goti bahar</small></span><span class="switch"><input type="checkbox" data-toggle="needSixToOpen"><span class="knob"></span></span></div>'
-  + '<div class="switchrow"><span>Triple-6 rule<small>ON = 2 baar 6 ke baad teesra 1–5 pakka</small></span><span class="switch"><input type="checkbox" data-toggle="tripleSixRule"><span class="knob"></span></span></div>'
+  + '<div class="switchrow"><span>Triple-6 rule<small>ON = lagatar 6 ke baad agla 1–5 pakka</small></span><span class="switch"><input type="checkbox" data-toggle="tripleSixRule"><span class="knob"></span></span></div>'
+  + '<label class="lbl">Kitne 6 ke baad rokna hai (triple-six limit)</label>'
+  + '<input type="number" min="1" max="6" data-num="tripleSixLimit" style="max-width:110px">'
   + '<div class="switchrow"><span>🛡️ Sab khaane safe<small>ON = poore board par koi kill nahi</small></span><span class="switch"><input type="checkbox" data-toggle="safeAll"><span class="knob"></span></span></div>'
-  + '<label class="lbl">Game speed: <b id="speedVal">1.0x</b> (goti + animation tez/dheemi)</label>'
-  + '<input type="range" id="speedRange" min="0.5" max="2.5" step="0.1" value="1">'
-  + '<label class="lbl">Turn timer (second, 0 = timer band)</label>'
-  + '<div class="row"><input type="range" id="timeoutRange" min="0" max="60" step="1" value="15" style="flex:1;min-width:160px"><b id="timeoutVal" style="min-width:52px;text-align:center">15s</b></div>'
+  + '<div class="switchrow"><span>🎁 6 par extra baari<small>OFF = 6 par bhi baari badal jaayegi</small></span><span class="switch"><input type="checkbox" data-toggle="extraTurnOnSix"><span class="knob"></span></span></div>'
+  + '<div class="switchrow"><span>⚔️ Kill par extra baari<small>OFF = kill ke baad bhi baari badal</small></span><span class="switch"><input type="checkbox" data-toggle="extraTurnOnKill"><span class="knob"></span></span></div>'
+  + '<label class="lbl">Jeetne ke liye kitni gotiyan ghar (0 = game default)</label>'
+  + '<input type="number" min="0" max="4" data-num="pantaPieces" style="max-width:110px">'
   + '</div>'
 
-  + '<div class="card"><h2>🧹 Reset</h2><p class="sub">Saare remote controls default par (normal game).</p>'
-  + '<button class="btn danger small" id="resetCtrl">Saare controls reset karo</button></div>';
+  + '<div class="card"><h2>⚙️ Advanced Settings — Speed + Timing</h2>'
+  + '<p class="sub">Timer UI hata diya gaya hai. "Auto-play delay" 0 rakha to game kabhi khud nahi chalega.</p>'
+  + '<label class="lbl">Game speed: <b id="speedVal">1.0x</b> (chhoti setting — 1 = normal, 2 = double tez, 0.5 = aadha)</label>'
+  + '<input type="range" id="speedRange" min="0.5" max="2.5" step="0.1" value="1">'
+  + '<label class="lbl">Auto-play delay (second, 0 = band • timer app me dikhta NAHI)</label>'
+  + '<div class="row"><input type="range" id="timeoutRange" min="0" max="60" step="1" value="0" style="flex:1;min-width:160px"><b id="timeoutVal" style="min-width:52px;text-align:center">0s</b></div>'
+
+  + '<details class="adv"><summary>🐢 Animation timing (khud set karo — 0 = app default)</summary>'
+  + '<p class="sub" style="margin-top:8px">Default ab pehle se dheema hai (goti 300ms/ghar, dice 72ms/frame). Yahan se aur dheema/tez kar sakte ho.</p>'
+  + '<div class="grid2">'
+  + '<div><label class="lbl">Goti ek ghar (ms)</label><input type="number" data-num="stepMs" min="0" max="2000"></div>'
+  + '<div><label class="lbl">Do ghar ke beech gap (ms)</label><input type="number" data-num="stepGapMs" min="0" max="2000"></div>'
+  + '<div><label class="lbl">Ghar se bahar nikalna (ms)</label><input type="number" data-num="openMs" min="0" max="3000"></div>'
+  + '<div><label class="lbl">Kaati goti ki wapsi (ms)</label><input type="number" data-num="homeMs" min="0" max="3000"></div>'
+  + '<div><label class="lbl">Dice frame (ms — badi = dheemi)</label><input type="number" data-num="diceFrameMs" min="0" max="400"></div>'
+  + '<div><label class="lbl">Dice poora spin (ms)</label><input type="number" data-num="diceSpinMs" min="0" max="4000"></div>'
+  + '<div><label class="lbl">Baari badalne ka gap (ms)</label><input type="number" data-num="turnGapMs" min="0" max="3000"></div>'
+  + '<div><label class="lbl">Kill ke baad gap (ms)</label><input type="number" data-num="killGapMs" min="0" max="3000"></div>'
+  + '</div></details>'
+  + '</div>'
+
+  + '<div class="card"><h2>🧹 Reset</h2><p class="sub">' + (isGlobal ? 'Universal settings default par.' : 'Is session ke saare controls default par (normal game).') + '</p>'
+  + '<button class="btn danger small" id="resetCtrl">' + (isGlobal ? 'Universal reset karo' : 'Saare controls reset karo') + '</button></div>';
 }
 
-function cref(code, key){ return db.ref('sessions/' + code + '/control/' + key); }
+/* ---------- events ---------- */
+function qel(wrap, sel){
+  if(wrap && wrap.querySelector){
+    const el = wrap.querySelector(sel);
+    if(el) return el;
+  }
+  return document.querySelector(sel);
+}
 
-function bindControlEvents(wrap, code){
+function bindControlEvents(wrap, scope, code){
+  // wrap par scope/code hamesha fresh rakho (ek hi baar listener lagta hai)
+  wrap.panel = { scope: scope, code: code };
+  if(wrap.dataset.bound === '1') return;
+  wrap.dataset.bound = '1';
+
   wrap.addEventListener('click', e => {
-    const t = e.target.closest('[data-set],[data-cmd],[data-win],[data-apply],[data-clear],[data-cluck] button,#msgBtn,#resetCtrl');
+    const t = e.target.closest('[data-set],[data-cmd],[data-win],[data-apply],[data-clear],[data-cluck] button,[data-cmode] button,#msgBtn,#resetCtrl,[data-preset],[data-allmode],[data-qfor] button,[data-qforapply],[data-qforclear],[data-strapply],[data-luckpct-off]');
     if(!t || !wrap.contains(t)) return;
+    scope = wrap.panel.scope; code = wrap.panel.code;
+
     if(t.hasAttribute('data-set')){
-      cref(code, t.getAttribute('data-set')).set(parseInt(t.getAttribute('data-val'), 10));
+      cref(scope, code, t.getAttribute('data-set')).set(parseInt(t.getAttribute('data-val'), 10));
     } else if(t.hasAttribute('data-cmd')){
-      cref(code, t.getAttribute('data-cmd')).set(true);
+      if(scope === 'global'){ alert('Reset/Skip/End jaise commands sirf session me chalte hain — pehle kisi session par Control dabao.'); return; }
+      cref(scope, code, t.getAttribute('data-cmd')).set(true);
     } else if(t.hasAttribute('data-win')){
-      if(confirm('Pakka ' + t.getAttribute('data-win') + ' ko winner banana hai?')) cref(code, 'forceWin').set(t.getAttribute('data-win'));
+      if(scope === 'global'){ alert('Force winner sirf session me chalta hai.'); return; }
+      if(confirm('Pakka ' + t.getAttribute('data-win') + ' ko winner banana hai?')) cref(scope, code, 'forceWin').set(t.getAttribute('data-win'));
     } else if(t.hasAttribute('data-apply')){
       const k = t.getAttribute('data-apply');
-      const v = k === 'diceQueue' ? $('queueIn').value.trim() : '';
-      cref(code, k).set(v);
+      const inp = qel(wrap, '#' + (k === 'diceQueue' ? 'queueIn' : k + 'In'));
+      const v = inp ? inp.value.trim() : '';
+      cref(scope, code, k).set(v);
     } else if(t.hasAttribute('data-clear')){
       const k = t.getAttribute('data-clear');
-      cref(code, k).set(k === 'diceQueue' ? '' : 0);
-      if(k === 'diceQueue') $('queueIn').value = '';
+      cref(scope, code, k).set(k === 'diceQueue' ? '' : 0);
+      if(k === 'diceQueue'){ const inp = qel(wrap, '#queueIn'); if(inp) inp.value = ''; }
     } else if(t.id === 'msgBtn'){
-      const v = $('msgIn').value.trim();
-      if(v){ cref(code, 'msg').set(v); $('msgIn').value = ''; }
+      if(scope === 'global'){ alert('Message sirf session me bhej sakte ho.'); return; }
+      const inp = qel(wrap, '#msgIn');
+      const v = inp ? inp.value.trim() : '';
+      if(v){ cref(scope, code, 'msg').set(v); inp.value = ''; }
     } else if(t.id === 'resetCtrl'){
-      if(confirm('Saare controls reset karoon? Game normal ho jayega.')) resetControlNode(code);
+      if(confirm(scope === 'global' ? 'Universal settings default par reset karoon?' : 'Saare controls reset karoon? Game normal ho jayega.')) resetControlNode(scope, code);
     } else if(t.parentElement && t.parentElement.hasAttribute('data-cluck')){
       const color = t.parentElement.getAttribute('data-cluck');
-      cref(code, 'luck_' + color).set(t.getAttribute('data-val'));
+      cref(scope, code, 'luck_' + color).set(t.getAttribute('data-val'));
+    } else if(t.parentElement && t.parentElement.hasAttribute('data-cmode')){
+      const color = t.parentElement.getAttribute('data-cmode');
+      cref(scope, code, 'mode_' + color).set(parseInt(t.getAttribute('data-val'), 10));
+    } else if(t.parentElement && t.parentElement.hasAttribute('data-qfor')){
+      const color = t.parentElement.getAttribute('data-qfor');
+      const cur = (wrap.querySelector('[data-qforin="' + color + '"]') || {value:''}).value.trim();
+      const next = cur ? (cur.replace(/\s+/g,'') + ',' + t.getAttribute('data-val')) : t.getAttribute('data-val');
+      cref(scope, code, 'queueFor_' + color).set(next);
+      const inp2 = wrap.querySelector('[data-qforin="' + color + '"]');
+      if(inp2) inp2.value = next;
+    } else if(t.hasAttribute('data-qforapply')){
+      const color = t.getAttribute('data-qforapply');
+      const inp = wrap.querySelector('[data-qforin="' + color + '"]');
+      cref(scope, code, 'queueFor_' + color).set(inp ? inp.value.trim() : '');
+    } else if(t.hasAttribute('data-qforclear')){
+      const color = t.getAttribute('data-qforclear');
+      cref(scope, code, 'queueFor_' + color).set('');
+      const inp = wrap.querySelector('[data-qforin="' + color + '"]');
+      if(inp) inp.value = '';
+    } else if(t.hasAttribute('data-strapply')){
+      const k = t.getAttribute('data-strapply');
+      const inp = wrap.querySelector('[data-str="' + k + '"]');
+      cref(scope, code, k).set(inp ? inp.value.trim() : '');
+    } else if(t.hasAttribute('data-luckpct-off')){
+      const color = t.getAttribute('data-luckpct-off');
+      cref(scope, code, 'luckPct_' + color).set(-1);
+      cref(scope, code, 'luck_' + color).set('normal');
+    } else if(t.hasAttribute('data-allmode')){
+      const m = parseInt(t.getAttribute('data-allmode'), 10);
+      COLORS.forEach(c => cref(scope, code, 'mode_' + c.id).set(m));
+    } else if(t.hasAttribute('data-preset')){
+      applyPreset(scope, code, t.getAttribute('data-preset'), t.getAttribute('data-color'));
+    }
+  });
+
+  wrap.addEventListener('input', e => {
+    const t = e.target;
+    if(t.hasAttribute('data-luckpct')){
+      const color = t.getAttribute('data-luckpct');
+      const el = wrap.querySelector('[data-luckval="' + color + '"]');
+      if(el) el.textContent = t.value + '%';
+    } else if(t.id === 'speedRange'){
+      const lab = qel(wrap, '#speedVal');
+      if(lab) lab.textContent = (Math.round(parseFloat(t.value) * 10) / 10).toFixed(1) + 'x';
+    } else if(t.id === 'timeoutRange'){
+      const lab = qel(wrap, '#timeoutVal');
+      if(lab) lab.textContent = t.value + 's';
     }
   });
 
   wrap.addEventListener('change', e => {
     const t = e.target;
-    if(t.hasAttribute('data-toggle')){
-      cref(code, t.getAttribute('data-toggle')).set(!!t.checked);
+    scope = wrap.panel.scope; code = wrap.panel.code;
+    if(t.hasAttribute('data-luckpct')){
+      // 🍀 luck % slider (0..100) — ye dice ke wazan badal deta hai
+      const color = t.getAttribute('data-luckpct');
+      cref(scope, code, 'luckPct_' + color).set(parseInt(t.value, 10));
+    } else if(t.hasAttribute('data-toggle')){
+      cref(scope, code, t.getAttribute('data-toggle')).set(!!t.checked);
     } else if(t.hasAttribute('data-ctoggle')){
-      cref(code, t.getAttribute('data-ctoggle') + '_' + t.getAttribute('data-color')).set(!!t.checked);
+      cref(scope, code, t.getAttribute('data-ctoggle') + '_' + t.getAttribute('data-color')).set(!!t.checked);
     } else if(t.hasAttribute('data-cset')){
-      cref(code, t.getAttribute('data-cset') + '_' + t.getAttribute('data-color')).set(parseInt(t.value, 10));
+      cref(scope, code, t.getAttribute('data-cset') + '_' + t.getAttribute('data-color')).set(parseInt(t.value, 10));
     } else if(t.hasAttribute('data-pluck')){
-      writePieceLuck(code, wrap, t.getAttribute('data-pluck'));
+      writePieceLuck(scope, code, wrap, t.getAttribute('data-pluck'));
+    } else if(t.hasAttribute('data-num')){
+      const k = t.getAttribute('data-num');
+      const v = t.value === '' ? 0 : parseInt(t.value, 10);
+      cref(scope, code, k).set(isNaN(v) ? 0 : v);
+    } else if(t.hasAttribute('data-str')){
+      // text inputs handled by Set button
     } else if(t.id === 'speedRange'){
       const v = Math.round(parseFloat(t.value) * 10) / 10;
-      cref(code, 'gameSpeed').set(v);
-      $('speedVal').textContent = v.toFixed(1) + 'x';
+      cref(scope, code, 'gameSpeed').set(v);
+      const lab = qel(wrap, '#speedVal');
+      if(lab) lab.textContent = v.toFixed(1) + 'x';
     } else if(t.id === 'timeoutRange'){
       const v = parseInt(t.value, 10);
-      cref(code, 'turnTimeout').set(v);
-      $('timeoutVal').textContent = v + 's';
+      cref(scope, code, 'turnTimeout').set(v);
+      const lab = qel(wrap, '#timeoutVal');
+      if(lab) lab.textContent = v + 's';
     }
   });
 }
 
-function writePieceLuck(code, wrap, color){
+/* ---------- presets ---------- */
+function applyPreset(scope, code, preset, color){
+  const w = (k, v) => cref(scope, code, k).set(v);
+  if(preset === 'stuck'){
+    w('mode_' + color, 3);            // sure — goti tezi se aage
+    w('blockHome_' + color, true);    // par AAKHRI goti ghar na jaaye
+    w('luckPct_' + color, 62);
+    w('protect_' + color, false);
+    alert(color + ': teesri goti tak sab kaat dega, aakhri goti ghar nahi jaayegi (usko ghar bhejne wala number hi nahi aayega).');
+  } else if(preset === 'home'){
+    w('mode_' + color, 3);
+    w('blockHome_' + color, false);
+    w('luckPct_' + color, 62);
+    alert(color + ': aakhri goti bhi pakka ghar pahunch jaayegi — uska zaroori number engine khud dega.');
+  } else if(preset === 'strong'){
+    w('mode_' + color, 2);
+    w('luckPct_' + color, 80);
+    w('blockHome_' + color, false);
+  } else if(preset === 'safe'){
+    w('protect_' + color, true);
+  } else if(preset === 'fair'){
+    w('mode_' + color, 0);
+    w('luckPct_' + color, -1);
+    w('luck_' + color, 'normal');
+    w('blockHome_' + color, false);
+    w('protect_' + color, false);
+    w('forceSix_' + color, false);
+    w('blockSix_' + color, false);
+    w('queueFor_' + color, '');
+    w('forceDice_' + color, 0);
+    w('targetPiece_' + color, 0);
+    w('pieceLuck_' + color, '2,2,2,2');
+  }
+}
+
+function writePieceLuck(scope, code, wrap, color){
   const vals = [];
   for(let i=0;i<4;i++){
     const sel = wrap.querySelector('[data-pluck="' + color + '"][data-idx="' + i + '"]');
     vals.push(sel ? sel.value : '2');
   }
-  cref(code, 'pieceLuck_' + color).set(vals.join(','));
+  cref(scope, code, 'pieceLuck_' + color).set(vals.join(','));
 }
 
-function resetControlNode(code){
-  const d = { nextDice: 0, diceQueue: '', needSixToOpen: true, tripleSixRule: true,
-    safeAll: false, lockDice: false, gameSpeed: 1.0, turnTimeout: 15,
-    cmd_extraTurn: false, cmd_skipTurn: false, cmd_reset: false, cmd_end: false,
-    forceWin: '', msg: '' };
-  COLORS.forEach(c => {
-    d['forceDice_' + c.id] = 0; d['luck_' + c.id] = 'normal';
-    d['forceSix_' + c.id] = false; d['blockSix_' + c.id] = false;
-    d['protect_' + c.id] = false; d['auto_' + c.id] = false;
-    d['pieceLuck_' + c.id] = '2,2,2,2';
-  });
-  db.ref('sessions/' + code + '/control').set(d);
+function resetControlNode(scope, code){
+  const d = defaultSettings();
+  if(scope === 'global'){
+    db.ref('global/control').set(d);
+  } else {
+    db.ref('sessions/' + code + '/control').set(d);
+  }
 }
 
-function renderControl(wrap, c){
+/* ---------- render: control ---------- */
+function renderControl(wrap, scope, c){
   c = c || {};
   wrap.querySelectorAll('[data-set="nextDice"]').forEach(b => {
     b.classList.toggle('on', parseInt(b.getAttribute('data-val'), 10) === (c.nextDice || 0));
   });
-  const q = $('queueNow');
+  const q = wrap.querySelector('#queueNow');
   if(q) q.textContent = c.diceQueue ? ('Chalu queue: ' + c.diceQueue) : 'Koi queue set nahi hai.';
+
   wrap.querySelectorAll('[data-toggle]').forEach(el => {
     const k = el.getAttribute('data-toggle');
-    el.checked = (k === 'needSixToOpen' || k === 'tripleSixRule') ? c[k] !== false : !!c[k];
+    if(k === 'needSixToOpen' || k === 'tripleSixRule' || k === 'extraTurnOnSix' || k === 'extraTurnOnKill') el.checked = c[k] !== false;
+    else el.checked = !!c[k];
   });
   wrap.querySelectorAll('[data-cset]').forEach(el => {
     el.value = String(c[el.getAttribute('data-cset') + '_' + el.getAttribute('data-color')] || 0);
@@ -565,21 +864,51 @@ function renderControl(wrap, c){
     const cur = c['luck_' + seg.getAttribute('data-cluck')] || 'normal';
     seg.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.getAttribute('data-val') === cur));
   });
+  wrap.querySelectorAll('[data-cmode]').forEach(seg => {
+    const cur = String(c['mode_' + seg.getAttribute('data-cmode')] || 0);
+    seg.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.getAttribute('data-val') === cur));
+  });
   wrap.querySelectorAll('[data-pluck]').forEach(sel => {
     const csv = c['pieceLuck_' + sel.getAttribute('data-pluck')] || '2,2,2,2';
     const parts = String(csv).split(',');
     const v = parts[parseInt(sel.getAttribute('data-idx'), 10)];
     if(v !== undefined) sel.value = v;
   });
+  wrap.querySelectorAll('[data-luckpct]').forEach(el => {
+    const color = el.getAttribute('data-luckpct');
+    const pct = (c['luckPct_' + color] === undefined || c['luckPct_' + color] === null) ? -1 : parseInt(c['luckPct_' + color], 10);
+    const lab = wrap.querySelector('[data-luckval="' + color + '"]');
+    if(pct >= 0){ el.value = pct; if(lab) lab.textContent = pct + '%'; }
+    else { el.value = 50; if(lab) lab.textContent = 'band (preset)'; }
+  });
+  wrap.querySelectorAll('[data-qfornow]').forEach(el => {
+    const color = el.getAttribute('data-qfornow');
+    const v = c['queueFor_' + color] || '';
+    el.textContent = v ? ('Chalu line: ' + v) : '';
+  });
+  wrap.querySelectorAll('[data-num]').forEach(el => {
+    const k = el.getAttribute('data-num');
+    const v = c[k];
+    if(v === undefined || v === null) return;
+    el.value = v;
+  });
+  wrap.querySelectorAll('[data-str="blockNumbers"]').forEach(el => {
+    if(c.blockNumbers !== undefined && c.blockNumbers !== null && document.activeElement !== el) el.value = c.blockNumbers;
+  });
+  wrap.querySelectorAll('[data-qforin]').forEach(el => {
+    const color = el.getAttribute('data-qforin');
+    const v = c['queueFor_' + color] || '';
+    if(document.activeElement !== el) el.value = v;
+  });
   const sp = (c.gameSpeed === undefined || c.gameSpeed === null) ? 1.0 : parseFloat(c.gameSpeed);
-  if($('speedRange')) $('speedRange').value = sp;
-  if($('speedVal')) $('speedVal').textContent = sp.toFixed(1) + 'x';
-  const to = (c.turnTimeout === undefined || c.turnTimeout === null) ? 15 : parseInt(c.turnTimeout, 10);
-  if($('timeoutRange')) $('timeoutRange').value = to;
-  if($('timeoutVal')) $('timeoutVal').textContent = to + 's';
+  const sr = wrap.querySelector('#speedRange');
+  if(sr){ sr.value = sp; const lab = wrap.querySelector('#speedVal'); if(lab) lab.textContent = sp.toFixed(1) + 'x'; }
+  const to = (c.turnTimeout === undefined || c.turnTimeout === null) ? 0 : parseInt(c.turnTimeout, 10);
+  const tr = wrap.querySelector('#timeoutRange');
+  if(tr){ tr.value = to; const lab = wrap.querySelector('#timeoutVal'); if(lab) lab.textContent = to + 's'; }
 }
 
-let liveCache = {state:{}, meta:{}};
+/* ---------- render: live ---------- */
 function renderLive(code){
   const box = $('liveBox');
   if(!box) return;
@@ -601,6 +930,42 @@ function renderLive(code){
       + '<div>♟ Gotiyan: <b>' + esc(st.pieces || '—') + '</b></div>'
       + '<div>⚡ Event: ' + esc(st.lastEvent || '—') + '</div>'
       + (st.winners ? '<div>🏆 Winners: <b>' + esc(st.winners) + '</b></div>' : '');
+
+    // needs + hints
+    liveNeeds = {};
+    liveHint = {};
+    if(st.needs){
+      String(st.needs).split(/\s+/).forEach(chunk => {
+        const p = chunk.split(':');
+        if(p.length === 2) liveNeeds[p[0]] = p[1];
+      });
+    }
+    if(st.nextHint){
+      String(st.nextHint).split(/\s+/).forEach(chunk => {
+        const p = chunk.split(':');
+        if(p.length === 2) liveHint[p[0]] = p[1];
+      });
+    }
+    const hb = $('hintBox');
+    if(hb){
+      let h = '<b>🧮 Kitne step baaki (ghar tak):</b><br>';
+      COLORS.forEach(c => {
+        const v = liveNeeds[c.tag] || '—';
+        h += '<span class="needchip live">' + c.tag + ': ' + esc(v) + '</span>';
+      });
+      h += '<br><b>🎯 Agla number (engine/manual ka hisaab):</b><br>';
+      COLORS.forEach(c => {
+        const v = liveHint[c.tag] || '-';
+        h += '<span class="needchip">' + c.tag + ': ' + esc(v) + '</span>';
+      });
+      h += '<p class="tagline">-1 = goti ghar pahunch chuki / khel me nahi. &nbsp;* = one-shot force.</p>';
+      h += '<div class="tagline">Jab "Sure/Assist" mode on ho, engine khud wo number dega jo goti ko ghar pahuncha de (aakhri goti atkegi nahi). Warna neeche se khud number laga do.</div>';
+      hb.innerHTML = h;
+    }
+    document.querySelectorAll('[data-need]').forEach(el => {
+      const tag = el.getAttribute('data-need');
+      el.textContent = liveNeeds[tag] ? ('baaki: ' + liveNeeds[tag]) : '';
+    });
   }).catch(() => {
     box.textContent = 'live data nahi mil raha (rules check karo)';
   });
