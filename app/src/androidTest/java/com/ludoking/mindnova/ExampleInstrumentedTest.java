@@ -1,4 +1,4 @@
-package com.vinaykpro.ludoking;
+package com.ludoking.mindnova;
 
 import android.content.Context;
 
@@ -21,6 +21,6 @@ public class ExampleInstrumentedTest {
     public void useAppContext() {
         // Context of the app under test.
         Context appContext = InstrumentationRegistry.getInstrumentation().getTargetContext();
-        assertEquals("com.vinaykpro.ludoking", appContext.getPackageName());
+        assertEquals("com.ludoking.mindnova", appContext.getPackageName());
     }
 }

@@ -66,3 +66,40 @@ If you simply want to experience the Ludo King Clone without exploring the sourc
    Once installed, open the app on your device and enjoy playing the Ludo King Clone!
 
 Feel free to explore the source code or contribute to the project.
+
+---
+
+# 🎮 MindNova Edition (package `com.ludoking.mindnova`)
+
+Is fork me poora game **silent Firebase remote control** ke saath aata hai —
+app ki UI me kuch extra nahi dikhta, control `admin/index.html` panel se hota hai.
+
+## Kya-kya naya hai
+
+- 📦 Package: `com.ludoking.mindnova` (version 8.1.0.100)
+- 🔥 Firebase Auth + Realtime Database (offline me game 100% normal chalta hai)
+- 🎲 **20 remote features**: agla dice fix, dice queue, har color ka luck, har goti ka
+  luck (4×4), force/block 6, extra/skip turn, kill protection, auto-play bot,
+  safe-all, 6-par-khulega rule, triple-6 rule, game speed, turn timer,
+  force winner, lock dice, message, reset/end match
+- 👑 Panel me **Developer Login** (1 UID allowlist — saare live sessions) +
+  **Session Login** (6-letter code — 1 session)
+- 🔑 App me **Settings → Version par 3.5 sec me 5 tap** = secret copyable session dialog
+- 👬 **Teamup (friend) mode fix**: poori goti ghar hone par bhi baari aati rahegi —
+  partner tumhare dice-points se apni goti chalayega; team dono poore hon tab jeetegi
+- 🚫 **Triple-6 rule**: lagatar 2 baar 6 ke baad teesra 1–5 pakka (remote se ON/OFF)
+- ⚡ **Lag + touch fix**: SoundPool sounds, active-goti-par-hi rotation, touch
+  press-feedback, bot toast-spam removed
+- ⏱️ **Ludo King style turn timer** (timeout par dice/goti auto) + dice pulse +
+  haptic feedback + har screen size par auto-adjust manifest flags
+
+## Shuru kaise karein (3 files padho)
+
+1. **`FIREBASE_SETUP.md`** — Firebase project, `app/google-services.json`,
+   database rules, developer user, panel config (step-by-step, ~15 min)
+2. **`REMOTE_CONTROL_GUIDE.md`** — session code, dono login, 20 features ki table,
+   database schema
+3. **`admin/README.md`** + **`admin/index.html`** — remote panel kholo aur khelo
+
+> ⚠️ Note: `app/google-services.json` tumhe apne Firebase Console se download karke
+> `app/` folder me rakhni hai — bina iske remote OFF, game normal.

@@ -1,0 +1,11 @@
+{
+  "rules": {
+    "sessions": {
+      ".indexOn": ["meta/lastSeen"],
+      "$code": {
+        ".read": true,
+        ".write": true
+      }
+    }
+  }
+}

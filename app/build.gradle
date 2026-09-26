@@ -1,16 +1,23 @@
 plugins {
     id 'com.android.application'
 }
+// MindNova: google-services plugin only applied when google-services.json exists,
+// so the project still builds offline. Drop your Firebase file at:
+//   app/google-services.json
+// (see FIREBASE_SETUP.md) and rebuild to enable remote control.
+if (file('google-services.json').exists()) {
+    apply plugin: 'com.google.gms.google-services'
+}
 
 android {
     compileSdk 33
 
     defaultConfig {
-        applicationId "com.vinaykpro.ludoking"
+        applicationId "com.ludoking.mindnova"
         minSdk 21
         targetSdk 33
-        versionCode 1562
-        versionName "8.0.0.278"
+        versionCode 1563
+        versionName "8.1.0.100"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -36,4 +43,9 @@ dependencies {
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
     implementation 'com.github.bumptech.glide:glide:4.15.1'
+
+    // Firebase (Remote control via Realtime Database + Developer Auth)
+    implementation platform('com.google.firebase:firebase-bom:32.7.0')
+    implementation 'com.google.firebase:firebase-database'
+    implementation 'com.google.firebase:firebase-auth'
 }
