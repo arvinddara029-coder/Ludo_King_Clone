@@ -30,11 +30,31 @@ jobs:
           chmod +x ./gradlew
           ./gradlew clean assembleRelease --no-daemon --stacktrace
 
+      - name: Sign release APK for direct installation
+        shell: bash
+        run: |
+          set -euo pipefail
+          UNSIGNED_APK="$(find app/build/outputs/apk/release -maxdepth 1 -type f -name '*-unsigned.apk' | head -n 1)"
+          if [ -z "$UNSIGNED_APK" ]; then
+            echo "Release APK not found"
+            find app/build/outputs/apk/release -maxdepth 1 -type f -print || true
+            exit 1
+          fi
+
+          BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          mkdir -p release-output
+
+          "$BUILD_TOOLS/zipalign" -p -f 4 "$UNSIGNED_APK" release-output/ludo-king-release-aligned.apk
+
+          "$BUILD_TOOLS/apksigner" sign             --ks "$HOME/.android/debug.keystore"             --ks-key-alias androiddebugkey             --ks-pass pass:android             --key-pass pass:android             --out release-output/Ludo-King-release.apk             release-output/ludo-king-release-aligned.apk
+
+          "$BUILD_TOOLS/apksigner" verify --verbose release-output/Ludo-King-release.apk
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: ludo-king-release-apk
-          path: app/build/outputs/apk/release/app-release.apk
+          path: release-output/Ludo-King-release.apk
           if-no-files-found: error
           retention-days: 30
 
@@ -44,4 +64,4 @@ jobs:
           tag_name: v1.0.${{ github.run_number }}
           name: Ludo King APK v1.0.${{ github.run_number }}
           generate_release_notes: true
-          files: app/build/outputs/apk/release/app-release.apk
+          files: release-output/Ludo-King-release.apk
