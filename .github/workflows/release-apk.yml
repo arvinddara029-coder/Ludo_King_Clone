@@ -42,7 +42,13 @@ jobs:
           fi
 
           BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
-          mkdir -p release-output
+          mkdir -p release-output "$HOME/.android"
+
+          # GitHub-hosted runners do not guarantee that a debug.keystore exists.
+          # Generate an ephemeral keystore for this CI build when needed.
+          if [ ! -f "$HOME/.android/debug.keystore" ]; then
+            keytool -genkeypair               -keystore "$HOME/.android/debug.keystore"               -storepass android               -keypass android               -alias androiddebugkey               -keyalg RSA               -keysize 2048               -validity 10000               -dname "CN=Android Debug,O=Android,C=US"
+          fi
 
           "$BUILD_TOOLS/zipalign" -p -f 4 "$UNSIGNED_APK" release-output/ludo-king-release-aligned.apk
 
