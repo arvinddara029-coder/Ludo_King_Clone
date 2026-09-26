@@ -1,4 +1,4 @@
-package com.vinaykpro.ludoking;
+package com.ludoking.mindnova;
 
 import static android.view.View.GONE;
 
@@ -55,6 +55,13 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Random;
+
+import com.ludoking.mindnova.remote.GameStateReporter;
+import com.ludoking.mindnova.remote.RemoteControl;
+import com.ludoking.mindnova.remote.SessionManager;
+import com.ludoking.mindnova.util.Haptics;
+import com.ludoking.mindnova.util.SoundFx;
 
 public class MainActivity extends AppCompatActivity {
     DisplayMetrics displayMetrics;
@@ -162,6 +169,34 @@ public class MainActivity extends AppCompatActivity {
 
     int currentWinnerPlayerIndex = -1;
 
+    // ================= MindNova: remote control + game feel =================
+    RemoteControl remote;
+    GameStateReporter reporter;
+    Random rng = new Random();
+    String sixStreakColor = "";
+    int sixStreakCount = 0;
+    int turnCounter = 0;
+    boolean diceRolledThisTurn = false;
+    boolean matchOver = false;
+    String winnersCsv = "";
+    long lockToastAt = 0;
+    // turn timer (Ludo King style)
+    TextView turnTimerText;
+    android.widget.ProgressBar turnTimerBar;
+    Runnable turnTimerRunnable;
+    long turnTimerDeadline = 0;
+    long turnTimerTotal = 0;
+
+    RemoteControl.Handler remoteHandler = new RemoteControl.Handler() {
+        @Override public void onExtraTurn() { grantRemoteExtraTurn(); }
+        @Override public void onSkipTurn() { remoteSkipTurn(); }
+        @Override public void onResetMatch() { remoteResetMatch(); }
+        @Override public void onEndMatch() { remoteEndMatch(); }
+        @Override public void onForceWin(String color) { forceWinColor(color); }
+        @Override public void onRemoteMessage(String msg) { remoteMessage(msg); }
+        @Override public void onRemoteConfigChanged() { /* config live padhi jaati hai */ }
+    };
+
     // Congratulations screen
     ConstraintLayout congratulationslayout;
     ImageView congratsmenubtn,congratssoundbtn,congratssharebtn,congratsreplaybtn;
@@ -235,7 +270,7 @@ public class MainActivity extends AppCompatActivity {
             this.endPosition = startPosition!=0?startPosition-2:50;
             if(!isBotPiece) {
                 this.piece.setOnClickListener(view -> {
-                    if (isAlive && isClickable && currentPlayerColor.equals(colour)) {
+                    if (isAlive && isClickable && canPlayPiece(colour)) {
                         diceValue = currentPlayerDice;
                         currentPlayerDice = -1;
                         for (Piece p : getPiecesByColor(colour)) {
@@ -244,12 +279,34 @@ public class MainActivity extends AppCompatActivity {
                         checkAdjustments(currBlock);
                         move(diceValue);
                         //Toast.makeText(MainActivity.this, x+"", Toast.LENGTH_SHORT).show();
-                    } else if (!isAlive && currentPlayerColor.equals(colour) && currentPlayerDice == 6) {
+                    } else if (!isAlive && canPlayPiece(colour) && canOpenWith(currentPlayerDice)) {
                         currentPlayerDice = -1;
                         for (Piece p : getPiecesByColor(colour)) {
                             p.inactiveState();
                         }
                         makeAlive();
+                    }
+                });
+                // MindNova: touch feedback — dabane par halka press-effect + turant response
+                this.piece.setOnTouchListener(new View.OnTouchListener() {
+                    @Override
+                    public boolean onTouch(View v, MotionEvent event) {
+                        switch (event.getAction()) {
+                            case MotionEvent.ACTION_DOWN:
+                                v.setScaleX(v.getScaleX() * 1.08f);
+                                v.setScaleY(v.getScaleY() * 1.08f);
+                                break;
+                            case MotionEvent.ACTION_UP:
+                                v.setScaleX(v.getScaleX() / 1.08f);
+                                v.setScaleY(v.getScaleY() / 1.08f);
+                                v.performClick();
+                                break;
+                            case MotionEvent.ACTION_CANCEL:
+                                v.setScaleX(v.getScaleX() / 1.08f);
+                                v.setScaleY(v.getScaleY() / 1.08f);
+                                break;
+                        }
+                        return true;
                     }
                 });
             }
@@ -275,15 +332,16 @@ public class MainActivity extends AppCompatActivity {
                 }
             });*/
             rotateAnimator = ObjectAnimator.ofFloat(readyToPick,"rotation",360,0);
-            rotateAnimator.setDuration(900);
+            rotateAnimator.setDuration(circleRotateMs());
             rotateAnimator.setRepeatCount(ObjectAnimator.INFINITE);
             rotateAnimator.setRepeatMode(ObjectAnimator.RESTART);
             rotateAnimator.setInterpolator(new LinearInterpolator());
-            rotateAnimator.start();
+            // MindNova lag fix: 16 gotiyon par infinite rotation pehle se chalana band.
+            // Rotation sirf active (chal sakne wali) goti par chalega — activeState() dekho.
         }
 
         void onClickForBot() {
-            if (isAlive && isClickable && currentPlayerColor.equals(colour)) {
+            if (isAlive && isClickable && canPlayPiece(colour)) {
                 diceValue = currentPlayerDice;
                 currentPlayerDice = -1;
                 for (Piece p : getPiecesByColor(colour)) {
@@ -292,7 +350,7 @@ public class MainActivity extends AppCompatActivity {
                 checkAdjustments(currBlock);
                 move(diceValue);
                 //Toast.makeText(MainActivity.this, x+"", Toast.LENGTH_SHORT).show();
-            } else if (!isAlive && currentPlayerColor.equals(colour) && currentPlayerDice == 6) {
+            } else if (!isAlive && canPlayPiece(colour) && canOpenWith(currentPlayerDice)) {
                 currentPlayerDice = -1;
                 for (Piece p : getPiecesByColor(colour)) {
                     p.inactiveState();
@@ -303,12 +361,13 @@ public class MainActivity extends AppCompatActivity {
 
         void makeAlive()
         {
+            cancelTurnTimer();
             isAlive = true;
             currBlock = startPosition;
-            piece.animate().translationX(x[startPosition]+pushXForPieces).translationY(y[startPosition]-pushYForPieces).setDuration(400).start(); // 16 75
+            piece.animate().translationX(x[startPosition]+pushXForPieces).translationY(y[startPosition]-pushYForPieces).setDuration(spd(420)).start(); // 16 75
             globalHandler.postDelayed(() -> {
                 isDiceMovableExtraChance = true;
-                if(!isBotPiece) { hintArrow.setVisibility(View.VISIBLE); }
+                if(!isBotPiece && !isAutoColor(colour)) { hintArrow.setVisibility(View.VISIBLE); }
                 checkAdjustments(currBlock);
                 if(currBlock>=24 && currBlock<=51) {
                     piece.setElevation(51-currBlock);
@@ -317,15 +376,15 @@ public class MainActivity extends AppCompatActivity {
                 } else {
                     piece.setElevation(currBlock);
                 }
-            },400);
+            }, spd(420));
             globalHandler.postDelayed(new Runnable() {
                 @Override
                 public void run() {
-                    if(isBotPiece) {
+                    if (isBotPiece || isAutoColor(colour)) {
                         d.roll();
                     }
                 }
-            },550);
+            }, spd(550));
         }
 
         void die()
@@ -336,16 +395,7 @@ public class MainActivity extends AppCompatActivity {
             checkAdjustments(currBlock);
             currWinnerBlock=0;
             numberOfSteps = 0;
-            if(isSoundOn) {
-                deathSound = MediaPlayer.create(MainActivity.this, R.raw.death);
-                deathSound.start();
-                deathSound.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
-                    @Override
-                    public void onCompletion(MediaPlayer mediaPlayer) {
-                        deathSound.release();
-                    }
-                });
-            }
+            SoundFx.get(MainActivity.this).play(SoundFx.DEATH); // MindNova: bina-lag sound
 
 
             Runnable r = new Runnable() {
@@ -362,7 +412,7 @@ public class MainActivity extends AppCompatActivity {
                             piece.setScaleX(1.0f);
                             piece.setScaleY(1.0f);
                         }
-                        piece.animate().translationX(defX).translationY(defY).setDuration(400).start();
+                        piece.animate().translationX(defX).translationY(defY).setDuration(spd(420)).start();
                         globalHandler.removeCallbacks(this);
                     }
                 }
@@ -374,6 +424,7 @@ public class MainActivity extends AppCompatActivity {
         void activeState()
         {
             isClickable = true;
+            try { rotateAnimator.setDuration(circleRotateMs()); } catch (Throwable ignored) {}
             rotateAnimator.start();
             readyToPick.setVisibility(View.VISIBLE);
             if(piece.getScaleX()<1.0f) {
@@ -396,19 +447,9 @@ public class MainActivity extends AppCompatActivity {
         }
 
         void move(int n) {
+            cancelTurnTimer();
             isClickable = false;
-            if(stepSound!=null) {
-                if(isSoundOn) {
-                    if (!stepSound.isPlaying()) {
-                        stepSound.seekTo(120);
-                        stepSound.start();
-                    } else if (stepSound.isPlaying()) {
-                        stepSound.pause();
-                        stepSound.seekTo(120);
-                        stepSound.start();
-                    }
-                }
-            }
+            SoundFx.get(MainActivity.this).playStep(); // MindNova: bina-lag step sound
 
 
 
@@ -431,7 +472,7 @@ public class MainActivity extends AppCompatActivity {
 
             if(currBlock==endPosition) { winnerBlocks = getWinnerBlocks(endPosition); isReadyToEnterWinnerZone = true; }
 
-            piece.animate().translationX(x[currBlock] + pushXForPieces).translationY(y[currBlock] - pushYForPieces).setDuration(220).start();
+            piece.animate().translationX(x[currBlock] + pushXForPieces).translationY(y[currBlock] - pushYForPieces).setDuration(spd(250)).start();
             /*if(!isReadyToEnterWinnerZone)
             {
                 piece.animate().translationX(x[currBlock] + pushXForPieces).translationY(y[currBlock] - pushYForPieces).setDuration(300).start();
@@ -442,11 +483,11 @@ public class MainActivity extends AppCompatActivity {
             PropertyValuesHolder scaleX = PropertyValuesHolder.ofFloat(View.SCALE_X, 1.0f, 1.4f);
             PropertyValuesHolder scaleY = PropertyValuesHolder.ofFloat(View.SCALE_Y, 1.0f, 1.4f);
             ObjectAnimator popUpAnimator = ObjectAnimator.ofPropertyValuesHolder(piece, scaleX, scaleY);
-            popUpAnimator.setDuration(100);
+            popUpAnimator.setDuration(spd(110));
             scaleX = PropertyValuesHolder.ofFloat(View.SCALE_X, 1.4f, 1.0f);
             scaleY = PropertyValuesHolder.ofFloat(View.SCALE_Y, 1.4f, 1.0f);
             ObjectAnimator popDownAnimator = ObjectAnimator.ofPropertyValuesHolder(piece, scaleX, scaleY);
-            popDownAnimator.setDuration(90);
+            popDownAnimator.setDuration(spd(100));
 
             /*ObjectAnimator alphaAnimator = ObjectAnimator.ofFloat(view, View.ALPHA, 1.0f, 0.0f);
             alphaAnimator.setDuration(duration);*/
@@ -476,36 +517,20 @@ public class MainActivity extends AppCompatActivity {
                     } else {
                         piece.setElevation(currBlock);
                     }
-                    stepSound.pause();
+                    // MindNova: SoundFx me pause ki zaroorat nahi
                     numberOfSteps++;
 
                     boolean isDeadChanceAvailable = false;
 
-                    if(safeSpots.contains(currBlock) && isSoundOn)
+                    if(safeSpots.contains(currBlock))
                     {
-                        safeSound = MediaPlayer.create(MainActivity.this,R.raw.safe);
-                        safeSound.start();
-                        safeSound.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
-                            @Override
-                            public void onCompletion(MediaPlayer mediaPlayer) {
-                                safeSound.release();
-                            }
-                        });
+                        SoundFx.get(MainActivity.this).play(SoundFx.SAFE); // MindNova: bina-lag
                     } else if(currWinnerBlock>0) {
                         int temp = 0;
                         if(currWinnerBlock>5)
                         {
                             hasCompletedItsPurpose = true;
-                            if(isSoundOn) {
-                                pantaSound = MediaPlayer.create(MainActivity.this, R.raw.panta);
-                                pantaSound.start();
-                                pantaSound.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
-                                    @Override
-                                    public void onCompletion(MediaPlayer mediaPlayer) {
-                                        pantaSound.release();
-                                    }
-                                });
-                            }
+                            SoundFx.get(MainActivity.this).play(SoundFx.PANTA); // MindNova: bina-lag
 
                             List<Piece> pieces = getPiecesByColor(this.colour);
                             for(Piece p: pieces) { if(p.hasCompletedItsPurpose) { temp++; } }
@@ -526,6 +551,38 @@ public class MainActivity extends AppCompatActivity {
                                                 checkPantaAdjustments(colour, currBlock);
                                             }
                                         }, 50);
+                                    }
+                                    // MindNova TEAMUP: poori goti ghar pahunchne par bhi khiladi bahar NAHI
+                                    // hoga — uski baari aati rahegi aur partner (friend) uske dice-points
+                                    // se apni goti chala sakega. Team tab jeetegi jab DONO partner poore hon.
+                                    if (gametype == 2) {
+                                        markTeamPlayerFinished(players.get(x));
+                                        if (colour.equals("red") || colour.equals("yellow")) {
+                                            if (isredyellowreadytowin) {
+                                                setRedYellowTeamAsWinners();
+                                            } else {
+                                                isredyellowreadytowin = true;
+                                                switchPlayers();
+                                                d.isDiceClickable = true;
+                                            }
+                                        } else {
+                                            if (isbluegreenreadytowin) {
+                                                stopEverything();
+                                                setBlueGreenTeamAsWinners();
+                                                ((TextView)findViewById(R.id.team1name1)).setText(player3name);
+                                                ((TextView)findViewById(R.id.team1name2)).setText(player2name);
+                                                ((TextView)findViewById(R.id.team2name1)).setText(player1name);
+                                                ((TextView)findViewById(R.id.team2name2)).setText(player4name);
+                                                showGameOverScreen();
+                                                mainDiceImageView.setVisibility(GONE);
+                                                hintArrow.setVisibility(GONE);
+                                            } else {
+                                                isbluegreenreadytowin = true;
+                                                switchPlayers();
+                                                d.isDiceClickable = true;
+                                            }
+                                        }
+                                        return;
                                     }
                                     redHomeBlink.clearAnimation();
                                     redHomeBlink.setVisibility(GONE);
@@ -601,14 +658,20 @@ public class MainActivity extends AppCompatActivity {
                                     }
                                     currentWinnerPlayerIndex = currentPlayerIndex;
                                     //checkAdjustments(currBlock);
-                                    if(gametype==2) {
-                                        for(Piece p: pieces) { p.piece.setVisibility(GONE); }
-                                        if(colour.equals("red") || colour.equals("yellow")) {
-                                            if(isredyellowreadytowin) {
+                                    // MindNova TEAMUP: khiladi list me rehta hai — uski baari aati rahegi
+                                    // aur partner uske dice-points se apni goti chala sakega.
+                                    if (gametype == 2) {
+                                        markTeamPlayerFinished(players.get(x));
+                                        if (colour.equals("red") || colour.equals("yellow")) {
+                                            if (isredyellowreadytowin) {
                                                 setRedYellowTeamAsWinners();
-                                            } else { isredyellowreadytowin = true; }
+                                            } else {
+                                                isredyellowreadytowin = true;
+                                                switchPlayers();
+                                                d.isDiceClickable = true;
+                                            }
                                         } else {
-                                            if(isbluegreenreadytowin) {
+                                            if (isbluegreenreadytowin) {
                                                 stopEverything();
                                                 setBlueGreenTeamAsWinners();
                                                 ((TextView)findViewById(R.id.team1name1)).setText(player3name);
@@ -618,11 +681,23 @@ public class MainActivity extends AppCompatActivity {
                                                 showGameOverScreen();
                                                 mainDiceImageView.setVisibility(GONE);
                                                 hintArrow.setVisibility(GONE);
-                                            } else { isbluegreenreadytowin = true; }
+                                            } else {
+                                                isbluegreenreadytowin = true;
+                                                switchPlayers();
+                                                d.isDiceClickable = true;
+                                            }
                                         }
-                                    } else {
-                                        setCurrentPlayerAsWinnerAtCurrentPosition(currentPlayerSelectedIndex, colour, currentPlayerName);
+                                        if (gametype != 3) {
+                                            globalHandler.postDelayed(new Runnable() {
+                                                @Override
+                                                public void run() {
+                                                    checkPantaAdjustments(colour, currBlock);
+                                                }
+                                            }, 50);
+                                        }
+                                        return;
                                     }
+                                    setCurrentPlayerAsWinnerAtCurrentPosition(currentPlayerSelectedIndex, colour, currentPlayerName);
 
                                     currentPlayerIndex = x;
                                     menuremoveplayersbtn.setVisibility(GONE);
@@ -659,33 +734,33 @@ public class MainActivity extends AppCompatActivity {
 
                     if(diceValue == 6 || currWinnerBlock>5 || isDeadChanceAvailable && !isThisPlayerWon) {
                         isDiceMovableExtraChance = true;
-                        if(!isBotPiece) { hintArrow.setVisibility(View.VISIBLE); } else {
+                        if(!isBotPiece && !isAutoColor(colour)) { hintArrow.setVisibility(View.VISIBLE); } else {
                             globalHandler.postDelayed(new Runnable() {
                                 @Override
                                 public void run() {
                                     d.roll();
                                 }
-                            },150);
+                            }, spd(220));
                         }
                     } else {
                         switchPlayers();
                         d.isDiceClickable = true;
                     }
                 }
-            }, 200); //325
+            }, spd(230)); //325
         }
 
 
 
         public boolean check(int diceValue) {
-            if(diceValue == 6)
-            {
-                if(!isAlive || (numberOfSteps+diceValue)<57)
-                {
+            // MindNova: remote se "need six to open" off ho to kisi bhi dice par goti khul sakti hai
+            if (!isAlive) {
+                if (canOpenWith(diceValue)) {
                     activeState();
                     return true;
-                } return false;
-            } else if(isAlive && (numberOfSteps+diceValue)<57 && !hasCompletedItsPurpose && !isThisPlayerWon) {
+                }
+                return false;
+            } else if ((numberOfSteps + diceValue) < 57 && !hasCompletedItsPurpose && !isThisPlayerWon) {
                 activeState();
                 return true;
             } else {
@@ -709,6 +784,7 @@ public class MainActivity extends AppCompatActivity {
         ((TextView)findViewById(R.id.team1name2)).setText(player2name);
         ((TextView)findViewById(R.id.team2name1)).setText(player1name);
         ((TextView)findViewById(R.id.team2name2)).setText(player4name);
+        noteWinner("blue+green"); // MindNova
     }
 
     private void setRedYellowTeamAsWinners() {
@@ -730,6 +806,7 @@ public class MainActivity extends AppCompatActivity {
         ((TextView)findViewById(R.id.team1name2)).setText(player4name);
         ((TextView)findViewById(R.id.team2name1)).setText(player3name);
         ((TextView)findViewById(R.id.team2name2)).setText(player2name);
+        noteWinner("red+yellow"); // MindNova
     }
 
     private String getLoserNameBasedOnSelectedIndex(int loserplayerselectedindex) {
@@ -743,6 +820,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showGameOverScreen() {
+        matchOver = true; // MindNova
+        cancelTurnTimer();
+        Haptics.win(this);
+        try { if (reporter != null) reporter.reportMatchEnd(winnersCsv); } catch (Throwable ignored) {}
         congratulationslayout.setVisibility(View.VISIBLE);
 
         if(isSoundOn) {
@@ -855,6 +936,7 @@ public class MainActivity extends AppCompatActivity {
                 hideThisPlayerDiceBg(4);
                 break;
         }
+        noteWinner(colour); // MindNova: live report ke liye
         currentWinnerPosition++;
     }
 
@@ -1092,8 +1174,17 @@ public class MainActivity extends AppCompatActivity {
                             if((killer.colour.equals("yellow") && p.colour.equals("red")) || (killer.colour.equals("red") && p.colour.equals("yellow")) || (killer.colour.equals("blue") && p.colour.equals("green")) || (killer.colour.equals("green") && p.colour.equals("blue")))
                             { continue; }
                         }
-                        if(!safeSpots.contains(targetBox)) {
+                        // MindNova: safe-all / kill-protection (remote)
+                        boolean forceSafe = false;
+                        try {
+                            if (remote != null) {
+                                forceSafe = remote.config.safeAll || remote.config.isProtected(p.colour);
+                            }
+                        } catch (Throwable ignored) {}
+                        if(!safeSpots.contains(targetBox) && !forceSafe) {
                             p.die();
+                            Haptics.kill(MainActivity.this);
+                            try { if (reporter != null) reporter.reportEvent("kill:" + killer.colour + ">" + p.colour); } catch (Throwable ignored) {}
                             return true;
                         }
                     }
@@ -1249,6 +1340,11 @@ public class MainActivity extends AppCompatActivity {
         }
 
         void roll() {
+            // MindNova: remote dice lock (pause jaisa)
+            if (remote != null && remote.config.lockDice) {
+                toastLockedOnce();
+                return;
+            }
             isRolling = true;
             isDiceClickable = false;
             isDiceMovableExtraChance = false;
@@ -1263,11 +1359,11 @@ public class MainActivity extends AppCompatActivity {
             diceAnimationDrawable.setOneShot(true);
             diceAnimationDrawable.start();
             diceHandler.postDelayed(() -> {
-                int ch = (int) Math.ceil(Math.random()*6);
+                int ch = rollDiceForColor(currentPlayerColor); // MindNova: remote+luck+no-3x6
                 String number = editText.getText().toString();
                 try {
                     int n = Integer.parseInt(number);
-                    ch = n;
+                    if (n >= 1 && n <= 6) ch = n; // legacy hidden override
                 } catch (Exception e) {}
                 switch (ch) {
                     case 1:
@@ -1292,13 +1388,23 @@ public class MainActivity extends AppCompatActivity {
                 isRolling = false;
 
                 currentPlayerDice = ch;
+                diceRolledThisTurn = true; // MindNova: turn timer stage-2
+                Haptics.tick(MainActivity.this);
+                try { if (reporter != null) reporter.reportDice(currentPlayerColor, ch); } catch (Throwable ignored) {}
 
-                List<Piece> pieces = getPiecesByColor(currentPlayerColor);
-                int x;
-                if(currentPlayerIndex==0) { x=players.size()-1; } else { x=currentPlayerIndex-1; }
-                Player currentPlayer = players.get(x);
-                //Toast.makeText(MainActivity.this, currentPlayer.color+"", Toast.LENGTH_SHORT).show();
+                // MindNova: teamup me jeete khiladi ki baari me PARTNER ki goti chalti hai
+                Player currentPlayer = getActivePlayer();
+                int x = (currentPlayer == null) ? 0 : players.indexOf(currentPlayer);
+                if (x < 0) x = 0;
+                String rollColor = currentPlayerColor;
+                if (gametype == 2 && currentPlayer != null && currentPlayer.finishedAll) {
+                    String pc = partnerOf(currentPlayerColor);
+                    if (findPlayerByColor(pc) != null) rollColor = pc; // partner khel me hai tabhi
+                }
+                List<Piece> pieces = getPiecesByColor(rollColor);
+                boolean botLike = (currentPlayer != null && currentPlayer.isBot) || isAutoColor(rollColor);
 
+                autoMove = null; // MindNova fix: pichhli baari ka stale autoMove (soft-lock bug)
                  int chances = 0;
                  int autoMoveBlock = -1;
 
@@ -1318,12 +1424,12 @@ public class MainActivity extends AppCompatActivity {
                         else {
                             autoMove = null;
                         }
-                        if(currentPlayer.isBot) { movablePieces.add(p); }
+                        if (botLike) { movablePieces.add(p); }
                         ++chances;
                     }
                 }
 
-                currentPlayer.chances = chances;
+                if (currentPlayer != null) currentPlayer.chances = chances;
 
                 if(autoMove!=null) {
 
@@ -1336,12 +1442,12 @@ public class MainActivity extends AppCompatActivity {
                         autoMove=null;
                         //Toast.makeText(MainActivity.this, x+"", Toast.LENGTH_SHORT).show();
                     }
-                    else if(!autoMove.isAlive && currentPlayerDice==6) {
+                    else if(!autoMove.isAlive && canOpenWith(currentPlayerDice)) {
                         currentPlayerDice = -1;
                         for(Piece p : pieces) { p.inactiveState(); }
                         autoMove.makeAlive();
                     }
-                } else if(currentPlayer.isBot && chances>0) {
+                } else if (botLike && chances > 0) {
                     Piece bestMovablePiece = movablePieces.get(0);
                     int bestKillingTargetSteps = 0;
                     int safetomovepoints = 15;
@@ -1360,7 +1466,7 @@ public class MainActivity extends AppCompatActivity {
                     }
 
                     // making pieces alive minimum+0.5 priority
-                    if(ch==6) {
+                    if (canOpenWith(ch)) {
                     for(Piece p : pieces) {
                         if(!p.isAlive) {
                             bestMovablePiece = p;
@@ -1396,9 +1502,8 @@ public class MainActivity extends AppCompatActivity {
                     y = x;
                     for (int i = 0; i < players.size(); i++) {
                         String colour = players.get(y).getColor();
-                        if (!colour.equals(currentPlayerColor)) {
+                        if (!colour.equals(rollColor)) {
                             List<Piece> enemypieces = getPiecesByColor(colour);
-                            Toast.makeText(MainActivity.this, colour, Toast.LENGTH_SHORT).show();
                             for (Piece tp : enemypieces) {
                                 if (tp.isAlive) {
                                     for (Piece mp : movablePieces) {
@@ -1453,11 +1558,33 @@ public class MainActivity extends AppCompatActivity {
                         }
                     }
 
+                    // MindNova: goti luck — blessed goti ko tarjeeh, cursed se bachao
+                    try {
+                        Piece luckPick = null;
+                        int luckBest = -1;
+                        for (Piece mp : movablePieces) {
+                            int li = pieces.indexOf(mp);
+                            int lv = pieceLuckOf(rollColor, li);
+                            if (lv > luckBest) { luckBest = lv; luckPick = mp; }
+                        }
+                        if (luckPick != null && luckBest >= 3) {
+                            bestMovablePiece = luckPick; // blessed = turant chalo
+                        } else {
+                            int bi = pieces.indexOf(bestMovablePiece);
+                            if (pieceLuckOf(rollColor, bi) == 0) {
+                                for (Piece mp : movablePieces) {
+                                    int li = pieces.indexOf(mp);
+                                    if (pieceLuckOf(rollColor, li) > 0) { bestMovablePiece = mp; break; }
+                                }
+                            }
+                        }
+                    } catch (Throwable ignored) {}
+
                     // killing the best piece max priority
                     y = x;
                     for (int i = 0; i < players.size(); i++) {
                         String color = players.get(y).getColor();
-                        if (!color.equals(currentPlayerColor)) {
+                        if (!color.equals(rollColor)) {
                             List<Piece> enemypieces = getPiecesByColor(color);
                             for (Piece tp : enemypieces) {
                                 if (tp.isAlive && !safeSpots.contains(tp.currBlock)) {
@@ -1481,12 +1608,13 @@ public class MainActivity extends AppCompatActivity {
                     //Toast.makeText(MainActivity.this, bestMovablePiece.colour+","+bestMovablePiece.startPosition, Toast.LENGTH_SHORT).show();
                     bestMovablePiece.onClickForBot();
                 } else if (chances == 0) {
+                        try { if (reporter != null) reporter.reportEvent("no-move:" + rollColor); } catch (Throwable ignored) {}
                         diceHandler.postDelayed(() -> {
                             switchPlayers();
                             isDiceClickable = true;
-                        }, 500);
+                        }, spd(500));
                     }
-            }, 350);
+            }, spd(380));
             }
     }
 
@@ -1543,6 +1671,7 @@ public class MainActivity extends AppCompatActivity {
         TextView playerNameTextView;
 
         int chances = 0;
+        boolean finishedAll = false; // MindNova teamup: 4 goti ghar, phir bhi khel me
 
         public int getPosition() {
             return position;
@@ -1625,6 +1754,15 @@ public class MainActivity extends AppCompatActivity {
 
         globalHandler = new Handler();
 
+        // ---- MindNova: silent Firebase remote control (UI me kuch extra nahi dikhega) ----
+        try {
+            SessionManager.getSessionCode(this);
+            reporter = new GameStateReporter(this);
+            remote = new RemoteControl(this, remoteHandler);
+            SessionManager.heartbeat(this, "match");
+            SoundFx.get(this).setEnabled(isSoundOn);
+        } catch (Throwable ignored) {}
+
         ObjectAnimator animator = ObjectAnimator.ofFloat(hintArrow, "translationX", -20, 20);
         animator.setRepeatCount(ValueAnimator.INFINITE);
         animator.setRepeatMode(ValueAnimator.REVERSE);
@@ -1655,6 +1793,7 @@ public class MainActivity extends AppCompatActivity {
         normalPiece = extras.getBoolean("normalPiece");
 
         gametype = extras.getInt("type"); // 1.classic , 2.teamup , 3.quick , 4.computer
+        try { SessionManager.setMatchInfo(this, true, gametypeName()); } catch (Throwable ignored) {}
 
         playername1.setText(player1name);
         playername2.setText(player2name);
@@ -1998,11 +2137,13 @@ public class MainActivity extends AppCompatActivity {
             public void onClick(View view) {
                 if(isSoundOn) {
                     isSoundOn = false;
+                    SoundFx.get(MainActivity.this).setEnabled(false);
                     sharedPreferences.edit().putBoolean("sound",false).apply();
                     ingamesoundbtn.setImageDrawable(ResourcesCompat.getDrawable(getResources(),R.drawable.soundoff,null));
                     if(congratulationSound!=null) { if(congratulationSound.isPlaying()) { congratulationSound.pause(); } }
                 } else {
                     isSoundOn = true;
+                    SoundFx.get(MainActivity.this).setEnabled(true);
                     sharedPreferences.edit().putBoolean("sound",true).apply();
                     ingamesoundbtn.setImageDrawable(ResourcesCompat.getDrawable(getResources(),R.drawable.soundon,null));
                     if(congratulationSound!=null) { if(!congratulationSound.isPlaying()) { congratulationSound.start(); } }
@@ -2184,11 +2325,13 @@ public class MainActivity extends AppCompatActivity {
             public void onClick(View view) {
                 if(isSoundOn) {
                     isSoundOn = false;
+                    SoundFx.get(MainActivity.this).setEnabled(false);
                     sharedPreferences.edit().putBoolean("sound",false).apply();
                     congratssoundbtn.setImageDrawable(ResourcesCompat.getDrawable(getResources(),R.drawable.soundoff,null));
                     if(congratulationSound!=null) { if(congratulationSound.isPlaying()) { congratulationSound.pause(); } }
                 } else {
                     isSoundOn = true;
+                    SoundFx.get(MainActivity.this).setEnabled(true);
                     sharedPreferences.edit().putBoolean("sound",true).apply();
                     congratssoundbtn.setImageDrawable(ResourcesCompat.getDrawable(getResources(),R.drawable.soundon,null));
                     if(congratulationSound!=null) { if(!congratulationSound.isPlaying()) { congratulationSound.start(); } }
@@ -2295,6 +2438,24 @@ public class MainActivity extends AppCompatActivity {
             mainDiceImageView.setVisibility(GONE);
             hintArrow.setVisibility(GONE);
             d = new Dice(mainDiceImageView, nop, color);
+            // MindNova: dice par touch feedback (dabao-mehsus)
+            mainDiceImageView.setOnTouchListener(new View.OnTouchListener() {
+                @Override
+                public boolean onTouch(View v, MotionEvent event) {
+                    switch (event.getAction()) {
+                        case MotionEvent.ACTION_DOWN:
+                            v.setScaleX(0.92f);
+                            v.setScaleY(0.92f);
+                            break;
+                        case MotionEvent.ACTION_UP:
+                        case MotionEvent.ACTION_CANCEL:
+                            v.setScaleX(1f);
+                            v.setScaleY(1f);
+                            break;
+                    }
+                    return false; // click Dice class ke listener tak jaane do
+                }
+            });
         RelativeLayout.LayoutParams lp = new RelativeLayout.LayoutParams(((int)(pxWidth*0.4)),((int)(pxWidth*0.4)));
         redHomeBlink.setLayoutParams(lp);
         lp.addRule(RelativeLayout.ALIGN_TOP,R.id.imageView); lp.addRule(RelativeLayout.ALIGN_LEFT,R.id.imageView);
@@ -2303,6 +2464,7 @@ public class MainActivity extends AppCompatActivity {
 
 
     private void stopEverything() {
+        try { cancelTurnTimer(); } catch (Throwable ignored) {}
         globalHandler.removeCallbacksAndMessages(null);
         d.diceHandler.removeCallbacksAndMessages(null);
         if(congratulationSound!=null) {
@@ -2315,6 +2477,12 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        try { cancelTurnTimer(); } catch (Throwable ignored) {}
+        try { if (remote != null) remote.detach(); } catch (Throwable ignored) {}
+        try {
+            SessionManager.setMatchInfo(this, false, "");
+            SessionManager.goOffline(this);
+        } catch (Throwable ignored) {}
         super.onDestroy();
     }
 
@@ -2462,8 +2630,519 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
+    // ================= MindNova helpers (remote + rules + feel) =================
+
+    /** Jis khiladi ki baari chal rahi hai (index juggling sambhal kar). */
+    Player getActivePlayer() {
+        try {
+            if (players == null || players.isEmpty()) return null;
+            int x = (currentPlayerIndex == 0) ? players.size() - 1 : currentPlayerIndex - 1;
+            if (x < 0 || x >= players.size()) x = 0;
+            return players.get(x);
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    /** Teamup jodi: red<->yellow, blue<->green. */
+    String partnerOf(String color) {
+        if ("red".equals(color)) return "yellow";
+        if ("yellow".equals(color)) return "red";
+        if ("blue".equals(color)) return "green";
+        if ("green".equals(color)) return "blue";
+        return color;
+    }
+
+    /** Is goti ko is samay chalaya ja sakta hai? (teamup partner-share samet) */
+    boolean canPlayPiece(String colour) {
+        if (colour != null && colour.equals(currentPlayerColor)) return true;
+        if (gametype == 2 && colour != null) {
+            try {
+                Player a = getActivePlayer();
+                if (a != null && a.finishedAll && colour.equals(partnerOf(currentPlayerColor))
+                        && findPlayerByColor(colour) != null) return true;
+            } catch (Throwable ignored) {}
+        }
+        return false;
+    }
+
+    /** Is dice par goti ghar se nikal sakti hai? */
+    boolean canOpenWith(int dice) {
+        if (dice == 6) return true;
+        try {
+            if (remote != null && !remote.config.needSixToOpen && dice > 0) return true;
+        } catch (Throwable ignored) {}
+        return false;
+    }
+
+    boolean isAutoColor(String color) {
+        try {
+            if (remote != null) return remote.config.isAuto(color);
+        } catch (Throwable ignored) {}
+        return false;
+    }
+
+    /** Goti luck 0=cursed 1=low 2=normal 3=blessed. */
+    int pieceLuckOf(String color, int pieceIndex) {
+        try {
+            if (remote != null) return remote.config.getPieceLuck(color, pieceIndex);
+        } catch (Throwable ignored) {}
+        return 2;
+    }
+
+    /** Animation duration remote speed ke hisaab se. */
+    long spd(long baseMs) {
+        try {
+            if (remote != null) return remote.config.scaled(baseMs);
+        } catch (Throwable ignored) {}
+        return baseMs;
+    }
+
+    long circleRotateMs() {
+        return spd(1200);
+    }
+
+    void toastLockedOnce() {
+        long now = System.currentTimeMillis();
+        if (now - lockToastAt < 2500) return;
+        lockToastAt = now;
+        try {
+            Toast.makeText(this, "Thoda intezaar karo…", Toast.LENGTH_SHORT).show();
+        } catch (Throwable ignored) {}
+    }
+
+    Player findPlayerByColor(String color) {
+        try {
+            for (Player p : players) {
+                if (p != null && color.equals(p.getColor())) return p;
+            }
+        } catch (Throwable ignored) {}
+        return null;
+    }
+
+    String gametypeName() {
+        switch (gametype) {
+            case 1: return "classic";
+            case 2: return "teamup";
+            case 3: return "quick";
+            case 4: return "computer";
+        }
+        return "classic";
+    }
+
+    void noteWinner(String tag) {
+        try {
+            if (tag == null || tag.isEmpty()) return;
+            winnersCsv = winnersCsv.isEmpty() ? tag : winnersCsv + "," + tag;
+        } catch (Throwable ignored) {}
+    }
+
+    /**
+     * Dice nikalo: remote force > queue > luck. Uske baad triple-six rule:
+     * ek hi khiladi lagatar 2 baar 6 laaye to teesri baar 1-5 (remote se off ho sakta hai).
+     */
+    int rollDiceForColor(String color) {
+        int ch;
+        boolean forced = false;
+        try {
+            if (remote != null && remote.isAttached()) {
+                ch = remote.rollDice(color);
+                forced = remote.lastWasForced;
+            } else {
+                ch = 1 + rng.nextInt(6);
+            }
+        } catch (Throwable t) {
+            ch = 1 + rng.nextInt(6);
+        }
+        boolean ruleOn = true;
+        try {
+            if (remote != null) ruleOn = remote.config.tripleSixRule;
+        } catch (Throwable ignored) {}
+        if (ruleOn && !forced && ch == 6 && color != null
+                && color.equals(sixStreakColor) && sixStreakCount >= 2) {
+            ch = 1 + rng.nextInt(5); // teesra 6 cancel — 1..5 me se
+            try {
+                if (reporter != null) reporter.reportEvent("no3x6:" + color);
+            } catch (Throwable ignored) {}
+        }
+        if (!forced) {
+            // developer-forced dice streak me nahi gina jaata
+            if (ch == 6 && color != null && color.equals(sixStreakColor)) {
+                sixStreakCount++;
+            } else if (ch == 6) {
+                sixStreakColor = color;
+                sixStreakCount = 1;
+            } else {
+                sixStreakCount = 0;
+                sixStreakColor = "";
+            }
+        }
+        return ch;
+    }
+
+    /** Teamup: jeete khiladi ko khel me rakho — crown dikhao, goti chhupao. */
+    void markTeamPlayerFinished(Player p) {
+        try {
+            if (p == null) return;
+            p.finishedAll = true;
+            List<Piece> pieces = getPiecesByColor(p.getColor());
+            for (Piece pc : pieces) {
+                pc.hasCompletedItsPurpose = true;
+                pc.isThisPlayerWon = true;
+                pc.isClickable = false;
+                try {
+                    pc.inactiveState();
+                } catch (Throwable ignored) {}
+                try {
+                    pc.piece.setVisibility(GONE);
+                } catch (Throwable ignored) {}
+            }
+            showTeamFinishCrown(p.getIndex());
+            if (reporter != null) reporter.reportEvent("home:" + p.getColor());
+        } catch (Throwable ignored) {}
+    }
+
+    void showTeamFinishCrown(int selectedIndex) {
+        try {
+            switch (selectedIndex + 1) {
+                case 1: crownIndex1.setVisibility(View.VISIBLE); break;
+                case 2: crownIndex2.setVisibility(View.VISIBLE); break;
+                case 3: crownIndex3.setVisibility(View.VISIBLE); break;
+                case 4: crownIndex4.setVisibility(View.VISIBLE); break;
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    String piecesSummary() {
+        StringBuilder sb = new StringBuilder();
+        try {
+            String[] cols = {"red", "green", "blue", "yellow"};
+            String[] tags = {"R", "G", "B", "Y"};
+            for (int i = 0; i < cols.length; i++) {
+                List<Piece> ps = getPiecesByColor(cols[i]);
+                int a = 0, h = 0;
+                for (Piece p : ps) {
+                    if (p.hasCompletedItsPurpose) h++;
+                    else if (p.isAlive) a++;
+                }
+                if (sb.length() > 0) sb.append(" ");
+                sb.append(tags[i]).append(":").append(a).append("a").append(h).append("h");
+            }
+        } catch (Throwable ignored) {}
+        return sb.toString();
+    }
+
+    /** Baari badalne par dice ka halka pulse (Ludo King feel). */
+    void pulseDice() {
+        try {
+            if (mainDiceImageView == null) return;
+            mainDiceImageView.animate().cancel();
+            mainDiceImageView.setScaleX(1f);
+            mainDiceImageView.setScaleY(1f);
+            mainDiceImageView.animate().scaleX(1.12f).scaleY(1.12f).setDuration(160)
+                    .withEndAction(new Runnable() {
+                        @Override
+                        public void run() {
+                            try {
+                                mainDiceImageView.animate().scaleX(1f).scaleY(1f).setDuration(160).start();
+                            } catch (Throwable ignored) {}
+                        }
+                    }).start();
+        } catch (Throwable ignored) {}
+    }
+
+    // ---------------- turn timer (Ludo King style) ----------------
+
+    void startTurnTimer() {
+        cancelTurnTimer();
+        if (matchOver) return;
+        int secs = 15;
+        try {
+            if (remote != null) secs = remote.config.turnTimeoutSec;
+        } catch (Throwable ignored) {}
+        if (secs <= 0) {
+            hideTimerUi();
+            return;
+        }
+        turnTimerTotal = secs * 1000L;
+        turnTimerDeadline = System.currentTimeMillis() + turnTimerTotal;
+        showTimerUi();
+        turnTimerRunnable = new Runnable() {
+            @Override
+            public void run() {
+                if (matchOver) {
+                    hideTimerUi();
+                    return;
+                }
+                long left = turnTimerDeadline - System.currentTimeMillis();
+                if (left <= 0) {
+                    onTurnTimeout();
+                    return;
+                }
+                updateTimerUi(left);
+                try {
+                    if (globalHandler != null) globalHandler.postDelayed(this, 200);
+                } catch (Throwable ignored) {}
+            }
+        };
+        try {
+            if (globalHandler != null) globalHandler.post(turnTimerRunnable);
+        } catch (Throwable ignored) {}
+    }
+
+    void onTurnTimeout() {
+        if (matchOver) {
+            hideTimerUi();
+            return;
+        }
+        try {
+            if (remote != null && remote.config.lockDice) {
+                startTurnTimer(); // pause me wait karo
+                return;
+            }
+            if (!diceRolledThisTurn && d != null && !d.isRolling
+                    && (d.isDiceClickable || isDiceMovableExtraChance)) {
+                d.roll(); // time out — dice khud chalao
+                turnTimerTotal = 6000; // goti chunne ke 6 sec
+                turnTimerDeadline = System.currentTimeMillis() + turnTimerTotal;
+                if (globalHandler != null && turnTimerRunnable != null) {
+                    globalHandler.post(turnTimerRunnable);
+                }
+                return;
+            }
+            if (diceRolledThisTurn && currentPlayerDice > 0) {
+                autoPickMovableAndTap(); // time out — goti khud chalo
+            }
+        } catch (Throwable ignored) {}
+        hideTimerUi();
+    }
+
+    void cancelTurnTimer() {
+        try {
+            if (globalHandler != null && turnTimerRunnable != null) {
+                globalHandler.removeCallbacks(turnTimerRunnable);
+            }
+        } catch (Throwable ignored) {}
+        turnTimerRunnable = null;
+        hideTimerUi();
+    }
+
+    void showTimerUi() {
+        try {
+            if (turnTimerText != null) turnTimerText.setVisibility(View.VISIBLE);
+            if (turnTimerBar != null) turnTimerBar.setVisibility(View.VISIBLE);
+        } catch (Throwable ignored) {}
+    }
+
+    void hideTimerUi() {
+        try {
+            if (turnTimerText != null) turnTimerText.setVisibility(GONE);
+            if (turnTimerBar != null) turnTimerBar.setVisibility(GONE);
+        } catch (Throwable ignored) {}
+    }
+
+    void updateTimerUi(long leftMs) {
+        try {
+            if (turnTimerText != null) {
+                long s = (leftMs + 999) / 1000;
+                turnTimerText.setText(s + "s");
+            }
+            if (turnTimerBar != null && turnTimerTotal > 0) {
+                int pct = (int) ((leftMs * 100) / turnTimerTotal);
+                if (pct < 0) pct = 0;
+                if (pct > 100) pct = 100;
+                turnTimerBar.setProgress(pct);
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    /** Timeout par chal sakne wali pehli (luck-pasand) goti khud chalo. */
+    void autoPickMovableAndTap() {
+        try {
+            if (matchOver || currentPlayerDice <= 0) return;
+            Player active = getActivePlayer();
+            String rc = currentPlayerColor;
+            if (gametype == 2 && active != null && active.finishedAll) {
+                String pc = partnerOf(currentPlayerColor);
+                if (findPlayerByColor(pc) != null) rc = pc;
+            }
+            List<Piece> pieces = getPiecesByColor(rc);
+            Piece pick = null;
+            int bestLuck = -1;
+            for (Piece p : pieces) {
+                boolean ok = false;
+                try {
+                    ok = p.check(currentPlayerDice);
+                } catch (Throwable ignored) {}
+                if (ok) {
+                    int li = pieces.indexOf(p);
+                    int lv = pieceLuckOf(rc, li);
+                    if (lv > bestLuck) {
+                        bestLuck = lv;
+                        pick = p;
+                    }
+                }
+            }
+            if (pick == null) return;
+            if (pick.isBotPiece) {
+                pick.onClickForBot();
+            } else {
+                try {
+                    pick.piece.performClick();
+                } catch (Throwable t) {
+                    pick.onClickForBot();
+                }
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    // ---------------- remote one-shot commands ----------------
+
+    void grantRemoteExtraTurn() {
+        try {
+            if (matchOver || d == null || d.isRolling) return;
+            isDiceMovableExtraChance = true;
+            d.isDiceClickable = true;
+            hintArrow.setVisibility(View.VISIBLE);
+            startTurnTimer();
+            Toast.makeText(this, "Extra turn!", Toast.LENGTH_SHORT).show();
+            if (reporter != null) reporter.reportEvent("cmd:extraTurn");
+        } catch (Throwable ignored) {}
+    }
+
+    void remoteSkipTurn() {
+        try {
+            if (matchOver || d == null || d.isRolling) return;
+            currentPlayerDice = -1;
+            String[] cols = {"red", "green", "blue", "yellow"};
+            for (String c : cols) {
+                for (Piece p : getPiecesByColor(c)) {
+                    try {
+                        p.inactiveState();
+                    } catch (Throwable ignored) {}
+                }
+            }
+            Toast.makeText(this, "Turn skipped", Toast.LENGTH_SHORT).show();
+            if (reporter != null) reporter.reportEvent("cmd:skipTurn");
+            switchPlayers();
+            d.isDiceClickable = true;
+        } catch (Throwable ignored) {}
+    }
+
+    void remoteResetMatch() {
+        try {
+            if (reporter != null) reporter.reportEvent("cmd:reset");
+            android.content.Intent ri = getIntent();
+            finish();
+            startActivity(ri);
+            overridePendingTransition(0, 0);
+        } catch (Throwable ignored) {}
+    }
+
+    void remoteEndMatch() {
+        try {
+            if (reporter != null) reporter.reportEvent("cmd:end");
+            finish();
+        } catch (Throwable ignored) {}
+    }
+
+    void remoteMessage(String msg) {
+        try {
+            if (msg == null || msg.isEmpty()) return;
+            Toast.makeText(this, msg, Toast.LENGTH_LONG).show();
+            if (reporter != null) reporter.reportMessage(msg);
+        } catch (Throwable ignored) {}
+    }
+
+    /** Developer tool: is color ko turant jeeta do. */
+    void forceWinColor(String color) {
+        try {
+            if (matchOver || color == null) return;
+            Player target = findPlayerByColor(color);
+            if (target == null) {
+                Toast.makeText(this, "Ye color khel me nahi hai", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            List<Piece> pieces = getPiecesByColor(color);
+            for (Piece p : pieces) {
+                p.hasCompletedItsPurpose = true;
+                p.isThisPlayerWon = true;
+                p.isClickable = false;
+                try {
+                    p.piece.setVisibility(GONE);
+                } catch (Throwable ignored) {}
+            }
+            if (reporter != null) reporter.reportEvent("cmd:forceWin:" + color);
+            Toast.makeText(this, color + " wins (remote)", Toast.LENGTH_SHORT).show();
+            if (gametype == 2) {
+                markTeamPlayerFinished(target);
+                if (color.equals("red") || color.equals("yellow")) {
+                    if (isredyellowreadytowin) {
+                        setRedYellowTeamAsWinners();
+                    } else {
+                        isredyellowreadytowin = true;
+                    }
+                } else {
+                    if (isbluegreenreadytowin) {
+                        stopEverything();
+                        setBlueGreenTeamAsWinners();
+                        ((TextView) findViewById(R.id.team1name1)).setText(player3name);
+                        ((TextView) findViewById(R.id.team1name2)).setText(player2name);
+                        ((TextView) findViewById(R.id.team2name1)).setText(player1name);
+                        ((TextView) findViewById(R.id.team2name2)).setText(player4name);
+                        showGameOverScreen();
+                        mainDiceImageView.setVisibility(GONE);
+                        hintArrow.setVisibility(GONE);
+                    } else {
+                        isbluegreenreadytowin = true;
+                    }
+                }
+                return;
+            }
+            setCurrentPlayerAsWinnerAtCurrentPosition(target.getIndex(), color, target.name);
+            int idx = players.indexOf(target);
+            if (idx >= 0) {
+                players.remove(idx);
+                if (currentPlayerIndex > idx) currentPlayerIndex--;
+                if (currentPlayerIndex >= players.size()) currentPlayerIndex = 0;
+            }
+            if (players.size() == 1) {
+                Player last = players.get(0);
+                int slot = currentWinnerPosition;
+                android.graphics.drawable.Drawable loserBadge =
+                        ResourcesCompat.getDrawable(getResources(), R.drawable.loser1, null);
+                if (slot == 2) {
+                    wlistcrown2.setVisibility(View.INVISIBLE);
+                    wlistname2.setText(last.name);
+                    wlistpiece2.setImageDrawable(getPieceDrawableByColor(last.color));
+                    wlistwinorlose2.setImageDrawable(loserBadge);
+                } else if (slot == 3) {
+                    wlistcrown3.setVisibility(View.INVISIBLE);
+                    wlistname3.setText(last.name);
+                    wlistpiece3.setImageDrawable(getPieceDrawableByColor(last.color));
+                    wlistwinorlose3.setImageDrawable(loserBadge);
+                } else {
+                    wlistcrown4.setVisibility(View.INVISIBLE);
+                    wlistname4.setText(last.name);
+                    wlistpiece4.setImageDrawable(getPieceDrawableByColor(last.color));
+                    wlistwinorlose4.setImageDrawable(loserBadge);
+                }
+                hideThisPlayerDiceBg(last.getIndex());
+                redHomeBlink.clearAnimation();
+                redHomeBlink.setVisibility(GONE);
+                mainDiceImageView.setVisibility(GONE);
+                hintArrow.setVisibility(GONE);
+                showGameOverScreen();
+            } else if (!players.isEmpty()) {
+                switchPlayers();
+                d.isDiceClickable = true;
+            }
+        } catch (Throwable ignored) {}
+    }
+
     void switchPlayers()
     {
+        if (matchOver) return;
         Player currentPlayer = players.get(currentPlayerIndex);
         currentPlayerPosition = currentPlayer.getPosition();
         currentPlayerColor = currentPlayer.getColor();
@@ -2471,7 +3150,21 @@ public class MainActivity extends AppCompatActivity {
         currentPlayerName = currentPlayer.name;
         //Toast.makeText(this, currentPlayerColor+"", Toast.LENGTH_SHORT).show();
         currentPlayer.setActive();
-        if(currentPlayer.isBot) {
+        // ---- MindNova: nayi baari — streak reset + live report + turn timer ----
+        sixStreakColor = "";
+        sixStreakCount = 0;
+        diceRolledThisTurn = false;
+        turnCounter++;
+        pulseDice();
+        try {
+            if (reporter != null) {
+                reporter.reportTurn(currentPlayerColor, currentPlayerName, turnCounter, players.size());
+                reporter.reportPieces(piecesSummary());
+            }
+        } catch (Throwable ignored) {}
+        startTurnTimer();
+        boolean autoTurn = currentPlayer.isBot || isAutoColor(currentPlayerColor);
+        if(autoTurn) {
             hintArrow.setVisibility(GONE);
             moveDice(currentPlayerPosition);
             new Handler().postDelayed(new Runnable() {
@@ -2479,7 +3172,7 @@ public class MainActivity extends AppCompatActivity {
                 public void run() {
                     d.roll();
                 }
-            },150);
+            }, spd(220));
         } else {
             moveDice(currentPlayerPosition);
             hintArrow.setVisibility(View.VISIBLE);
@@ -2707,6 +3400,11 @@ public class MainActivity extends AppCompatActivity {
         wlistname4 = findViewById(R.id.winnerlistpname4);
 
         gameStartImageView = findViewById(R.id.gamestartimageview);
+
+        // MindNova: turn timer UI (Ludo King style)
+        turnTimerText = findViewById(R.id.turnTimerText);
+        turnTimerBar = findViewById(R.id.turnTimerBar);
+        hideTimerUi();
 
         pos1 = new float[4][2];
         pos2 = new float[4][2];

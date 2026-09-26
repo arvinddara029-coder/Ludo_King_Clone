@@ -1,4 +1,4 @@
-package com.vinaykpro.ludoking;
+package com.ludoking.mindnova;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -10,6 +10,10 @@ import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ObjectAnimator;
 import android.annotation.SuppressLint;
+import android.app.AlertDialog;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.PorterDuff;
@@ -32,8 +36,12 @@ import android.view.animation.OvershootInterpolator;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
+import android.widget.Toast;
+
+import com.ludoking.mindnova.remote.SessionManager;
 
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.resource.gif.GifDrawable;
@@ -123,6 +131,10 @@ public class HomeActivity extends AppCompatActivity implements View.OnClickListe
     ImageView exitYesBtn,exitNoBtn;
     private float onedp;
 
+    // MindNova: version par 5-tap secret
+    int secretTapCount = 0;
+    long secretTapWindowStart = 0;
+
     @SuppressLint({"MissingInflatedId", "ClickableViewAccessibility"})
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -131,6 +143,15 @@ public class HomeActivity extends AppCompatActivity implements View.OnClickListe
         setContentView(R.layout.activity_home);
         Objects.requireNonNull(getSupportActionBar()).hide();
         initViews();
+        // ---- MindNova: session code ready + online heartbeat (silent, UI me kuch nahi) ----
+        try {
+            SessionManager.getSessionCode(this);
+            SessionManager.heartbeat(this, "home");
+        } catch (Throwable ignored) {}
+        // Version par 5 baar tap = secret session dialog (copyable)
+        attachSecretSessionTap(findViewById(R.id.op15));
+        attachSecretSessionTap(findViewById(R.id.textView7));
+        attachSecretSessionTap(findViewById(R.id.version));
         View v = findViewById(R.id.homebackgroundview);
         ConstraintLayout.LayoutParams bgparams = new ConstraintLayout.LayoutParams((int)pxWidth,(int)(pxHeight+getStatusBarHeight()+60));
         v.setLayoutParams(bgparams);
@@ -2691,10 +2712,100 @@ public class HomeActivity extends AppCompatActivity implements View.OnClickListe
     @Override
     protected void onResume() {
         super.onResume();
+        try { SessionManager.heartbeat(this, "home"); } catch (Throwable ignored) {}
         if(isMusicOn) {
             if(!m.isPlaying()) {
                 m.start();
             }
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        try { SessionManager.goOffline(this); } catch (Throwable ignored) {}
+        super.onDestroy();
+    }
+
+    // ================= MindNova: secret session dialog =================
+
+    /** Settings > Version (ya neeche version text) par 3.5 sec me 5 tap = dialog. */
+    void attachSecretSessionTap(View v) {
+        if (v == null) return;
+        try { v.setClickable(true); } catch (Throwable ignored) {}
+        v.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                long now = System.currentTimeMillis();
+                if (now - secretTapWindowStart > 3500) {
+                    secretTapWindowStart = now;
+                    secretTapCount = 0;
+                }
+                secretTapCount++;
+                if (secretTapCount >= 5) {
+                    secretTapCount = 0;
+                    secretTapWindowStart = 0;
+                    showSessionDialog();
+                }
+            }
+        });
+    }
+
+    void showSessionDialog() {
+        try {
+            final String code = SessionManager.getSessionCode(this);
+            final String device = SessionManager.getDeviceLabel();
+            final boolean online = SessionManager.isFirebaseReady(this);
+
+            LinearLayout root = new LinearLayout(this);
+            root.setOrientation(LinearLayout.VERTICAL);
+            int pad = (int) (20 * getResources().getDisplayMetrics().density);
+            root.setPadding(pad, (int) (pad * 0.7), pad, (int) (pad * 0.4));
+
+            TextView head = new TextView(this);
+            head.setText("SESSION CODE (tap karke select / copy karo)");
+            head.setTextSize(12);
+            head.setTextColor(0xFF888888);
+            root.addView(head);
+
+            final TextView codeView = new TextView(this);
+            codeView.setText(code);
+            codeView.setTextSize(44);
+            codeView.setTypeface(codeView.getTypeface(), android.graphics.Typeface.BOLD);
+            codeView.setTextColor(0xFF111111);
+            codeView.setTextIsSelectable(true);
+            root.addView(codeView);
+
+            TextView info = new TextView(this);
+            info.setText("Device: " + device
+                    + "\nFirebase: " + (online ? "CONNECTED" : "OFFLINE (net/app setup dekho)")
+                    + "\n\nAdmin panel (index.html) kholo > Session Login me ye code daalo."
+                    + "\nPhir agla dice, goti luck, speed — sab live control hoga."
+                    + "\n\nKisi ko ye code mat do — jiske paas code, uske haath me game!");
+            info.setTextIsSelectable(true);
+            root.addView(info);
+
+            new AlertDialog.Builder(this)
+                    .setView(root)
+                    .setPositiveButton("Band karo", null)
+                    .setNeutralButton("Code copy", (d, w) -> copyText("Session code", code))
+                    .setNegativeButton("Sab copy", (d, w) -> copyText("Session info",
+                            "Session: " + code + "\nDevice: " + device
+                                    + "\nFirebase: " + (online ? "CONNECTED" : "OFFLINE")))
+                    .show();
+        } catch (Throwable ignored) {}
+    }
+
+    void copyText(String label, String text) {
+        try {
+            ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+            if (cm != null) {
+                cm.setPrimaryClip(ClipData.newPlainText(label, text));
+                Toast.makeText(this, "Copy ho gaya: " + text, Toast.LENGTH_SHORT).show();
+                return;
+            }
+            Toast.makeText(this, text, Toast.LENGTH_LONG).show();
+        } catch (Throwable t) {
+            try { Toast.makeText(this, text, Toast.LENGTH_LONG).show(); } catch (Throwable ignored) {}
         }
     }
 }

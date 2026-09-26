@@ -1,4 +1,4 @@
-package com.vinaykpro.ludoking;
+package com.ludoking.mindnova;
 
 import org.junit.Test;
 

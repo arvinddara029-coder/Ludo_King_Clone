@@ -1,4 +1,4 @@
-package com.vinaykpro.ludoking;
+package com.ludoking.mindnova;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.res.ResourcesCompat;
@@ -15,12 +15,16 @@ import android.view.WindowManager;
 
 import java.util.Objects;
 
+import com.ludoking.mindnova.remote.SessionManager;
+
 public class SplashActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setFullScreen();
         setContentView(R.layout.activity_splash);
+        // MindNova: device ka secret session code pehle se taiyaar rakho
+        try { SessionManager.getSessionCode(this); } catch (Throwable ignored) {}
         Objects.requireNonNull(getSupportActionBar()).hide();
 
         new Handler().postDelayed(new Runnable() {
