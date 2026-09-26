@@ -4800,7 +4800,7 @@
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent">
+            app:layout_constraintTop_toBottomOf="@+id/imageView30">
 
             <ImageView
                 android:id="@+id/imageView26"
@@ -4873,18 +4873,19 @@
             android:id="@+id/imageView24"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginTop="-10dp"
+            android:layout_marginTop="6dp"
+            app:layout_constraintBottom_toTopOf="@+id/imageView30"
             app:layout_constraintEnd_toEndOf="@id/constraintLayout"
             app:layout_constraintHorizontal_bias="0.0"
             app:layout_constraintStart_toStartOf="@+id/constraintLayout"
-            app:layout_constraintTop_toBottomOf="@+id/imageView30"
+            app:layout_constraintTop_toBottomOf="@+id/imageView28"
             app:srcCompat="@drawable/playguest" />
 
         <ImageView
             android:id="@+id/imageView28"
             android:layout_width="wrap_content"
             android:layout_height="58dp"
-            app:layout_constraintBottom_toTopOf="@+id/constraintLayout"
+            app:layout_constraintBottom_toTopOf="@+id/imageView24"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:srcCompat="@drawable/loginbenefits" />
@@ -4893,9 +4894,10 @@
             android:id="@+id/imageView30"
             android:layout_width="40dp"
             android:layout_height="40dp"
+            app:layout_constraintBottom_toTopOf="@+id/constraintLayout"
             app:layout_constraintEnd_toEndOf="@+id/constraintLayout"
             app:layout_constraintStart_toStartOf="@+id/constraintLayout"
-            app:layout_constraintTop_toBottomOf="@+id/constraintLayout"
+            app:layout_constraintTop_toBottomOf="@+id/imageView24"
             app:srcCompat="@drawable/or" />
 
         <ImageView
