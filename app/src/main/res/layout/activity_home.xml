@@ -2457,9 +2457,9 @@
             android:layout_width="wrap_content"
             android:layout_height="45dp"
             android:layout_marginTop="5dp"
-            app:layout_constraintEnd_toEndOf="@+id/constraintLayout4"
-            app:layout_constraintStart_toStartOf="@+id/constraintLayout4"
-            app:layout_constraintTop_toBottomOf="@+id/constraintLayout4"
+            app:layout_constraintEnd_toEndOf="@+id/constraintLayout2"
+            app:layout_constraintStart_toStartOf="@+id/constraintLayout2"
+            app:layout_constraintTop_toBottomOf="@+id/constraintLayout2"
             app:srcCompat="@drawable/continuebtn" />
 
         <TextView
@@ -4022,6 +4022,7 @@
             android:layout_marginTop="-8dp"
             android:layout_marginEnd="-10dp"
             android:layout_weight="1"
+            android:visibility="gone"
             app:layout_constraintEnd_toEndOf="@+id/constraintLayout2"
             app:layout_constraintStart_toStartOf="@+id/constraintLayout2"
             app:layout_constraintTop_toBottomOf="@+id/constraintLayout2"
@@ -4034,6 +4035,7 @@
             android:layout_marginStart="15dp"
             android:layout_marginEnd="15dp"
             android:background="@drawable/loginbg2"
+            android:visibility="gone"
             app:layout_constraintEnd_toEndOf="@+id/constraintLayout2"
             app:layout_constraintStart_toStartOf="@+id/constraintLayout2"
             app:layout_constraintTop_toBottomOf="@+id/imageView36">
@@ -4676,6 +4678,7 @@
             android:layout_width="0dp"
             android:layout_height="50dp"
             android:layout_weight="1"
+            android:visibility="gone"
             app:layout_constraintBottom_toTopOf="@+id/constraintLayout42"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintHorizontal_bias="0.5"
@@ -4690,6 +4693,7 @@
             android:layout_marginStart="27dp"
             android:layout_marginEnd="27dp"
             android:background="@drawable/loginbg2"
+            android:visibility="gone"
             app:layout_constraintBottom_toTopOf="@+id/imageView85"
             app:layout_constraintEnd_toEndOf="@+id/constraintLayout6"
             app:layout_constraintHorizontal_bias="0.5"
@@ -4764,6 +4768,8 @@
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:background="#ee000000"
+        android:clickable="false"
+        android:focusable="false"
         android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"

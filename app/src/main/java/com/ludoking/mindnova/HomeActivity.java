@@ -222,21 +222,28 @@ public class HomeActivity extends AppCompatActivity implements View.OnClickListe
         rotateAnimator.start();
 
 
-        // player login logic
-        //sharedPreferences = getSharedPreferences("LudoModUser",MODE_PRIVATE);
+        // Auto guest login — skip Facebook / Google / Play-as-Guest screens
+        firstLoginLayout.setVisibility(View.GONE);
+        guestprofilecreateoreditlayout.setVisibility(View.GONE);
+        hideSocialLoginUi();
 
         boolean isPlayerLoggedIn = sharedPreferences.getBoolean("logged",false);
 
         if(!isPlayerLoggedIn) {
             int tempnum = (int) Math.floor(Math.random()*7777)+2145;
-            firstLoginLayout.setVisibility(View.VISIBLE);
             String generatedguestname = "Guest"+tempnum;
             stcsusernametextview.setText(generatedguestname);
             playerNameBtnComTextView.setText(generatedguestname);
             usernamehomescreen.setText(generatedguestname);
             this.onClick(imageView);
+            diamondscount1.setText(("100"));
+            diamondscount2.setText(("100"));
             coinscount1.setText(("1,000"));
             coinscount2.setText(("1,000"));
+            SharedPreferences.Editor editor = sharedPreferences.edit();
+            editor.putBoolean("logged", true);
+            editor.putString("username", generatedguestname);
+            editor.apply();
         } else {
             int dpindex = sharedPreferences.getInt("dp",0);
             setProfilePic(dpindex);
@@ -2281,6 +2288,31 @@ public class HomeActivity extends AppCompatActivity implements View.OnClickListe
         nointernethandler.removeCallbacks(nointernetrunnable);
         nointernet.animate().scaleX(1.0f).scaleY(1.0f).setInterpolator(new OvershootInterpolator()).setDuration(300).setListener(null).start();
         nointernethandler.postDelayed(nointernetrunnable,1500);
+    }
+
+    /** Hide Facebook / Google / Play Games login blocks (login screen is never shown). */
+    void hideSocialLoginUi() {
+        try {
+            if (firstLoginLayout != null) firstLoginLayout.setVisibility(View.GONE);
+            View loginBenefitsGuest = findViewById(R.id.imageView36);
+            if (loginBenefitsGuest != null) loginBenefitsGuest.setVisibility(View.GONE);
+            View guestSocialLogin = findViewById(R.id.constraintLayout4);
+            if (guestSocialLogin != null) guestSocialLogin.setVisibility(View.GONE);
+            View loginBenefitsStats = findViewById(R.id.imageView80);
+            if (loginBenefitsStats != null) loginBenefitsStats.setVisibility(View.GONE);
+            View statsSocialLogin = findViewById(R.id.constraintLayout42);
+            if (statsSocialLogin != null) statsSocialLogin.setVisibility(View.GONE);
+            if (lgnwfbbtn != null) lgnwfbbtn.setVisibility(View.GONE);
+            if (snwgglbtn != null) snwgglbtn.setVisibility(View.GONE);
+            if (snwpgbtn != null) snwpgbtn.setVisibility(View.GONE);
+            if (playasguestbtn != null) playasguestbtn.setVisibility(View.GONE);
+            if (plgnwfbbtn != null) plgnwfbbtn.setVisibility(View.GONE);
+            if (psnwgglbtn != null) psnwgglbtn.setVisibility(View.GONE);
+            if (psnwpgbtn != null) psnwpgbtn.setVisibility(View.GONE);
+            if (stcslgwfb != null) stcslgwfb.setVisibility(View.GONE);
+            if (stcslgwggl != null) stcslgwggl.setVisibility(View.GONE);
+            if (stcslgwpg != null) stcslgwpg.setVisibility(View.GONE);
+        } catch (Throwable ignored) {}
     }
 
     @Override
